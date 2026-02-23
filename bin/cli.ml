@@ -1,8 +1,7 @@
 (* #require "cmdliner";; *)
-(* bin/cli.ml *)
 
 open Cmdliner
-open Ocaml_books
+open Ocaml_books.Config
 
 (* ────────────────────────────────────────────── *)
 (* Common options ───────────────────────────────── *)
@@ -31,13 +30,13 @@ let load_config verbose custom_path =
   match custom_path with
   | Some p when not (Sys.file_exists p) ->
       if verbose then Printf.eprintf "Custom config %s not found, using defaults\n" p;
-      Config.default ()
+      Ocaml_books.Config.default ()
   | Some p ->
       if verbose then Printf.printf "Loading config from: %s\n" p;
-      Config.load ()  (* add ~path support later if needed *)
+      Ocaml_books.Config.load ()  (* add ~path support later if needed *)
   | None ->
       if verbose then Printf.printf "Loading config from default locations\n";
-      Config.load ()
+      Ocaml_books.Config.load ()
 
 
 (* ────────────────────────────────────────────── *)
@@ -62,7 +61,7 @@ let init_cmd =
     end else
       let path = Filename.concat (Sys.getenv "HOME") ".config/ocaml-books/config.json" in
       try
-        Config.create_default path;
+        Ocaml_books.Config.create_default path;
         if v then Printf.printf "Created config: %s\n" path;
         0
       with e ->
@@ -98,7 +97,7 @@ let import_cmd =
     end else
       try
         if v then Printf.printf "Extracting from %s to %s\n" path cfg.library_dir;
-        let extracted = Unzip.extract_fb2_files path cfg.library_dir in
+        let extracted = Ocaml_books.Unzip.extract_fb2_files path cfg.library_dir in
         if v then Printf.printf "Extracted %d FB2 files\n" (List.length extracted);
         0
       with e ->
@@ -129,7 +128,7 @@ let organize_cmd =
 (* ────────────────────────────────────────────── *)
 (* Main program *)
 
-let () =
+let main () =
   let doc = "Tool for managing and organizing personal FB2 book collection" in
   let sdocs = Manpage.s_common_options in
   let man = [
@@ -148,5 +147,7 @@ let () =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  let cmd = Cmd.group main_info [init_cmd; import_cmd; organize_cmd] in
-  exit (Cmd.eval cmd)
+  let cmd = Cmd.group main_info @@ [init_cmd; import_cmd; organize_cmd] in
+  Cmd.eval' cmd
+
+let () = if !Sys.interactive then () else exit (main ())
