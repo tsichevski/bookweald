@@ -1,2 +1,4 @@
 (library
- (name ocaml_books))
+ (name ocaml_books)
+ (libraries zip xml-light)
+ )

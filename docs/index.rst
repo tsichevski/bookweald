@@ -14,7 +14,7 @@ OCaml
 Location
 --------
 
-GitHub
+https://github.com/tsichevski/ocaml-books.git
 
 Goals
 -----
@@ -98,8 +98,8 @@ Project Structure Suggestion
   ├── bin/
   │   └── main.ml             # command-line tool
   ├── opam
-  ├── README.md
-  └── library/                # where books will be organized
+  ├── README.rst
+
 
 Example Code Snippets
 ~~~~~~~~~~~~~~~~~~~~~
