@@ -7,10 +7,10 @@ open Ocaml_books.Fb2_parse
 (*   List.iter (Printf.printf "Extracted: %s\n") paths; *)
 (*   Printf.printf "Total: %d files\n" (List.length paths) *)
 
-let test_extract_fb2_files =
-  match parse_title_author "/tmp/raw-fb2/723100.fb2" with
-  | (author_name, title, path) -> 
-     Printf.printf "Author: %s, title: %s; path: %s\n" author_name title path
+(* let test_extract_fb2_files = *)
+(*   match parse_title_author "/tmp/raw-fb2/723100.fb2" with *)
+(*   | (author_name, title, path) ->  *)
+(*      Printf.printf "Author: %s, title: %s; path: %s\n" author_name title path *)
 
 (* let () = test_extract_fb2_files *)
 
