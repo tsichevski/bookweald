@@ -1,167 +1,106 @@
-### Goals for `organize` in this iteration
+=================================
+Organize Command
+=================================
 
-- Read configuration (`library_dir` and `target_dir`)
-- Find all regular files in `library_dir` (for now — no recursion, no ZIPs)
-- Treat them as FB2 files
-- Parse each with `Fb2_parse.parse_title_author`
-- Group books by author (simple `Hashtbl.t`)
-- For each book:
-  - Create subdirectory `target_dir / sanitized_author`
-  - Move (or copy in dry-run) the file to `target_dir / author / author - title.fb2`
-  - Sanitize filenames (replace forbidden characters)
-- Respect `--dry-run` (print actions instead of moving)
-- Respect `--verbose` (show more details)
-- Print summary at the end
+.. contents::
+   :depth: 2
+   :local:
 
-### Required additions
 
-1. Add helper in `lib/fs.ml` (or `lib/utils.ml`) for filename sanitization
+Purpose
+-------
 
-```ocaml
-(* lib/fs.ml – add this function *)
+The ``organize`` subcommand parses all FB2 files in the configured ``library_dir``,
+extracts author and title metadata, groups books by author, and moves them into
+subdirectories under ``target_dir`` named after each author.
 
-let sanitize_filename s =
-  String.map (fun c ->
-    match c with
-    | '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
-    | '\000' .. '\031' -> '_'
-    | _ -> c
-  ) s
-  |> String.trim
-  |> fun s -> if s = "" then "unnamed" else s
-```
+Current behavior (as implemented):
 
-2. Add simple grouping in `lib/organize.ml` (new file)
+- Scans only the top level of ``library_dir`` (no recursion yet)
+- Processes only files ending with ``.fb2``
+- Uses ``fb2_parse.parse_title_author`` for metadata extraction
+- Groups by author name (case-insensitive, first author only)
+- Sanitizes filenames and directory names
+- Moves files to ``target_dir/author_name/author_name - title.fb2``
+- Respects ``--dry-run`` (prints actions instead of moving)
+- Respects ``--verbose`` (shows detailed progress and errors)
 
-```ocaml
-(* lib/organize.ml *)
+This is the core feature for making books accessible by author via subdirectories.
 
-open Ocaml_books
 
-module AuthorTbl = Hashtbl.Make(String)
+Usage
+-----
 
-type book = {
-  author : string;
-  title  : string;
-  path   : string;
-}
+Basic::
 
-let group_by_author books =
-  let tbl = AuthorTbl.create 16 in
-  List.iter (fun b ->
-    let key = String.lowercase_ascii b.author in
-    let existing = AuthorTbl.find_opt tbl key |> Option.value ~default:[] in
-    AuthorTbl.replace tbl key (b :: existing)
-  ) books;
-  tbl
-```
+   ocaml-books organize
 
-3. Update `bin/cli.ml` – replace the placeholder `organize_cmd`
+With options::
 
-```ocaml
-let organize_cmd =
-  let doc = "Parse FB2 files and move them into author-named subdirectories" in
-  let man = [
-    `S Manpage.s_description;
-    `P "Scans library_dir for FB2 files,";
-    `P "parses author/title, and moves files to target_dir/author_name/.";
-    `P "Uses sanitized filenames: author - title.fb2";
-  ] in
-  let info =
-    Cmd.info "organize"
-      ~doc
-      ~man
-      ~exits:Cmd.Exit.defaults
-  in
-  Cmd.v info Term.(const (fun (verbose, custom_path, dry) ->
-    let cfg = load_config verbose custom_path in
+   ocaml-books organize --verbose
+   ocaml-books organize --dry-run
+   ocaml-books organize --config ./custom-config.json
 
-    if verbose then begin
-      Printf.printf "Organize mode\n";
-      Printf.printf "  Source: %s\n" cfg.library_dir;
-      Printf.printf "  Target: %s\n" cfg.target_dir;
-      if dry then Printf.printf "  [dry-run] No files will be moved\n";
-    end;
 
-    try
-      if not (Sys.is_directory cfg.library_dir) then
-        failwith (Printf.sprintf "Not a directory: %s" cfg.library_dir);
+Behavior details
+----------------
 
-      let files =
-        Sys.readdir cfg.library_dir
-        |> Array.to_list
-        |> List.map (Filename.concat cfg.library_dir)
-        |> List.filter (fun p ->
-             Sys.is_file p &&
-             Filename.check_suffix p ".fb2"  (* basic filter – improve later *)
-          )
-      in
+1. Loads configuration (library_dir, target_dir, dry_run, verbose)
 
-      if verbose then
-        Printf.printf "Found %d candidate FB2 files\n" (List.length files);
+2. Lists all regular files in ``library_dir`` that end with ``.fb2``
 
-      let books = ref [] in
-      let parse_failures = ref 0 in
+3. For each file:
+   - Parses author and title
+   - On success: adds to in-memory grouping (Hashtbl by lowercase author)
+   - On failure: prints error (does not stop processing)
 
-      List.iter (fun path ->
-        try
-          let author, title, _ = Fb2_parse.parse_title_author path in
-          books := { author; title; path } :: !books;
-          if verbose then
-            Printf.printf "Parsed: %s → %s\n" author title
-        with e ->
-          incr parse_failures;
-          if verbose then
-            Printf.eprintf "Parse failed: %s → %s\n" path (Printexc.to_string e)
-      ) files;
+4. For each author group:
+   - Creates subdirectory ``target_dir / sanitized_author``
+   - For each book:
+     - Builds filename ``sanitized_author - sanitized_title.fb2``
+     - In dry-run: prints what would be moved
+     - Otherwise: moves the file using ``Sys.rename``
 
-      if !parse_failures > 0 then
-        Printf.eprintf "Warning: %d files failed to parse\n" !parse_failures;
+5. Prints summary (number of books processed, failures)
 
-      let tbl = Organize.group_by_author !books in
 
-      AuthorTbl.iter (fun _key books ->
-        List.iter (fun b ->
-          let author_dir = Filename.concat cfg.target_dir (Fs.sanitize_filename b.author) in
-          let dest_name = Printf.sprintf "%s - %s.fb2"
-                            (Fs.sanitize_filename b.author)
-                            (Fs.sanitize_filename b.title) in
-          let dest_path = Filename.concat author_dir dest_name in
+Known limitations (current version)
+-----------------------------------
 
-          if dry then
-            Printf.printf "[dry-run] Would move %s → %s\n" b.path dest_path
-          else begin
-            if verbose then Printf.printf "Moving %s → %s\n" b.path dest_path;
-            Fs.mkdir_p author_dir;
-            Sys.rename b.path dest_path
-          end
-        ) books
-      ) tbl;
+- No recursive scan of subdirectories in ``library_dir``
+- Only the first ``<author>`` block is used (no support for multiple authors yet)
+- Filename collisions (same author + title) overwrite without warning
+- No copy mode (always move)
+- No progress bar or detailed statistics
+- No undo / backup of moved files
 
-      Printf.printf "Organized %d books\n" (List.length !books);
-      0
 
-    with e ->
-      Printf.eprintf "Organize failed: %s\n" (Printexc.to_string e);
-      1
-  ) $ common_opts)
-```
+Example output (with --verbose)
+-------------------------------
 
-### Dune update
+   Scanning directory: /home/user/books/incoming
+   Found 12 candidate FB2 files
+   Parsed: Лев Толстой → Война и мир
+   Parsed: Антон Чехов → Вишнёвый сад
+   Parse failed: broken.fb2: missing <title-info>
+   Created directory: /home/user/books/organized/лев толстой
+   Moved /home/user/books/incoming/war_and_peace.fb2 → /home/user/books/organized/лев толстой/лев толстой - война и мир.fb2
+   Organized 11 books
 
-Add new library file:
 
-```lisp
-;; lib/dune
-(library
- (name ocaml_books)
- (libraries unix zip xml-light yojson ppx_deriving_yojson.runtime cmdliner)
- (preprocess (pps ppx_deriving_yojson)))
-```
+Future improvements (planned)
+-----------------------------
 
-### Test after commit & build
+- Recursive directory scanning
+- Support multiple authors per book (join with ", " or separate entries)
+- Filename collision handling (add counter: "Title (2).fb2")
+- Copy mode (--copy flag)
+- Progress reporting or summary table
+- Undo log / backup of original files
 
-```bash
-dune build bin/cli.exe
-./_build/default/bin/cli.exe organize --verbose
-./_build/default/bin/cli.exe organize --dry-run
+
+See also
+--------
+
+- Configuration Management — how to set library_dir and target_dir
+- Command-line Interface — full list of options and subcommands

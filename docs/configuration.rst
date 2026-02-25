@@ -1,164 +1,116 @@
-=====================
-Program Configuration
-=====================
+========================
+Configuration Management
+========================
 
 .. contents::
    :depth: 2
    :local:
 
 
-Goals for configuration
------------------------
+Purpose
+-------
 
-The tool needs a persistent place to store:
+The tool uses a JSON configuration file to store user-specific paths and preferences.
 
-- path to incoming ZIP archives / raw FB2 files (`library_dir`)
-- destination directory where books will be organized (`target_dir`)
-- optional settings (default encoding, dry-run mode, log level, etc.)
-
-Location
---------
-
-Configuration file will be placed in the standard XDG location:
-
-``~/.config/ocaml-books/config.json``
-
-This is the most conventional choice on Linux/macOS and is respected by many tools.
-
-
-Chosen format
--------------
-
-**JSON** — simple, human-readable, easy to edit, widely supported.
-
-Library: **yojson** + **ppx_deriving_yojson**
-
-::
-
-   opam install yojson ppx_deriving_yojson
-
-
-Why yojson + ppx_deriving_yojson
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- minimal dependencies
-- type-safe (de)serialization
-- good error messages
-- easy to extend later (add new fields without breaking old configs)
+This avoids hard-coding values and makes the tool more flexible for different users and machines.
 
 
 Configuration type
 ------------------
 
-::
+The configuration is represented by a record with the following fields:
 
-   type t = {
-     library_dir     : string;
-     target_dir      : string;
-     default_encoding: string option;   (* future use *)
-     dry_run         : bool;
-     verbose         : bool;
+- library_dir (string)  
+  Directory containing ZIP archives or raw FB2 files to process.
+
+- target_dir (string)  
+  Directory where organized books will be placed (author subdirectories).
+
+- dry_run (boolean)  
+  If true: simulate actions without modifying the file system.
+
+- verbose (boolean)  
+  If true: print detailed progress and debug information.
+
+
+Default values
+--------------
+
+When no valid config file is found, the tool uses these defaults::
+
+   library_dir      = ~/books/incoming
+   target_dir       = ~/books/organized
+   dry_run          = false
+   verbose          = true
+
+
+Configuration file locations
+----------------------------
+
+The tool searches for the configuration file in this order:
+
+1. ./config.json  
+   (current working directory — useful for project-specific or per-session overrides)
+
+2. ~/.config/ocaml-books/config.json  
+   (standard user configuration directory on Linux/macOS)
+
+If no valid file is found or parsing fails, the tool falls back to the defaults above.
+
+
+Loading behavior
+----------------
+
+- The tool tries each location in order.
+- If a file is found, it is parsed as JSON.
+- Invalid JSON or unknown fields trigger a warning on stderr; the tool continues with defaults.
+- Missing fields are filled with defaults.
+- Read or permission errors are printed to stderr and fallback occurs.
+
+
+Creating default configuration
+------------------------------
+
+Use the ``init`` subcommand::
+
+   ocaml-books init
+
+This creates ~/.config/ocaml-books/config.json with default values.
+
+Alternatively, specify a custom path::
+
+   ocaml-books init --config ./my-config.json
+
+This writes to the given path instead.
+
+
+Example config file
+-------------------
+
+::
+   {
+     "library_dir": "/home/user/my-fb2-collection/zips",
+     "target_dir":  "/home/user/my-fb2-collection/organized",
+     "dry_run":     false,
+     "verbose":     true
    }
-   [@@deriving yojson { strict = false }]
+
+The file is created in pretty-printed JSON format for readability.
 
 
-Loading logic – priorities
---------------------------
+Notes
+-----
 
-1. Explicit path via command line argument (future)
-2. ``./config.json`` (current directory – useful for project-specific overrides)
-3. ``~/.config/ocaml-books/config.json`` (user-global default)
-4. Hardcoded safe defaults
+- The tool does not currently support environment variable overrides or multiple config profiles.
+- All paths are expanded using standard shell conventions (~ → home directory).
+- JSON is pretty-printed when created.
+- Future extensions may include:
+  - Support for legacy encoding conversion
+  - Command-line overrides for individual fields
+  - Validation of paths (existence, writability)
 
-::
+See also
+--------
 
-   let default_config () : t =
-     {
-       library_dir      = Filename.concat (Sys.getenv "HOME") "books/incoming";
-       target_dir       = Filename.concat (Sys.getenv "HOME") "books/organized";
-       default_encoding = Some "utf-8";
-       dry_run          = false;
-       verbose          = true;
-     }
-
-
-   let config_file_locations () : string list =
-     [
-       "config.json";
-       Filename.concat (Sys.getenv "HOME") ".config/ocaml-books/config.json";
-     ]
-
-
-   let load () : t =
-     let rec try_load = function
-       | [] -> default_config ()
-       | path :: rest ->
-           if Sys.file_exists path then
-             try
-               let json = Yojson.Safe.from_file path in
-               match t_of_yojson json with
-               | Ok cfg -> cfg
-               | Error e ->
-                   Printf.eprintf "Invalid config %s: %s\n" path e;
-                   try_load rest
-             with e ->
-               Printf.eprintf "Cannot read config %s: %s\n" path (Printexc.to_string e);
-               try_load rest
-           else
-             try_load rest
-     in
-     try_load (config_file_locations ())
-
-
-Usage example
--------------
-
-::
-
-   let cfg = Config.load () in
-
-   Printf.printf "Organizing books from:\n  %s\n  → %s\n"
-     cfg.library_dir cfg.target_dir;
-
-   if cfg.dry_run then
-     Printf.printf "Dry run mode – no files will be moved\n";
-
-
-Creating default config (optional command)
-------------------------------------------
-
-::
-
-   let create_default path =
-     let cfg = default_config () in
-     let json = t_to_yojson cfg in
-     let pretty = Yojson.Safe.pretty_to_string ~std:true json in
-     let oc = open_out path in
-     output_string oc (pretty ^ "\n");
-     close_out oc;
-     Printf.printf "Created default config: %s\n" path
-
-
-Directory setup
----------------
-
-Add to ``lib/dune``:
-
-.. code-block:: lisp
-
-   (library
-    (name ocaml_books)
-    (libraries unix zip xml-light yojson ppx_deriving_yojson.runtime))
-
-
-Add new file ``lib/config.ml`` with the code above.
-
-Next steps suggestions
-----------------------
-
-- Add ``--config PATH`` command-line argument (using Arg or cmdliner)
-- Add simple ``init`` subcommand to create default config
-- Validate that ``library_dir`` and ``target_dir`` exist and are directories
-- Decide whether to support environment variables override (XDG_CONFIG_HOME, etc.)
-
-
+- Command-line interface — how to use ``init`` and other commands
+- Project structure — where config is used

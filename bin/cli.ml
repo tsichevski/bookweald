@@ -31,13 +31,13 @@ let common_opts =
 let load_config verbose custom_path =
   match custom_path with
   | Some p when not (Sys.file_exists p) ->
-      if verbose then Printf.eprintf "Custom config %s not found, using defaults\n" p;
+      if verbose then Printf.eprintf "Custom config %s not found, using defaults\n%!" p;
       Ocaml_books.Config.default ()
   | Some p ->
-      if verbose then Printf.printf "Loading config from: %s\n" p;
+      if verbose then Printf.printf "Loading config from: %s\n%!" p;
       Ocaml_books.Config.load ()  (* add ~path support later if needed *)
   | None ->
-      if verbose then Printf.printf "Loading config from default locations\n";
+      if verbose then Printf.printf "Loading config from default locations\n%!";
       Ocaml_books.Config.load ()
 
 
@@ -58,16 +58,18 @@ let init_cmd =
   in
   Cmd.make info Term.(const (fun (v, c, d) ->
     if d then begin
-      Printf.printf "[dry-run] Would create default config\n";
+      Printf.printf "[dry-run] Would create default config\n%!";
       0
     end else
+      let cfg = load_config v c in
+      let verbose = v || cfg.verbose in
       let path = Filename.concat (Sys.getenv "HOME") ".config/ocaml-books/config.json" in
       try
         Ocaml_books.Config.create_default path;
-        if v then Printf.printf "Created config: %s\n" path;
+        if verbose then Printf.printf "Created config: %s\n%!" path;
         0
       with e ->
-        Printf.eprintf "Failed to create config: %s\n" (Printexc.to_string e);
+        Printf.eprintf "Failed to create config: %s\n%!" (Printexc.to_string e);
         1
   ) $ common_opts)
 
@@ -91,20 +93,21 @@ let import_cmd =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  Cmd.v info Term.(const (fun (v, c, d) path ->
+  Cmd.make info Term.(const (fun (v, c, d) path ->
     let cfg = load_config v c in
+    let verbose = v || cfg.verbose in
     if d then begin
-      Printf.printf "[dry-run] Would extract from %s to %s\n" path cfg.library_dir;
+      Printf.printf "[dry-run] Would extract from %s to %s\n%!" path cfg.library_dir;
       0
     end else
       match Ocaml_books.Unzip.extract_fb2_files path cfg.library_dir with
       | Ok extracted ->
-         if v then
-           Printf.printf "Extracted %d FB2 files\n" (List.length extracted);
+         if verbose then
+           Printf.printf "Extracted %d FB2 files\n%!" (List.length extracted);
          0
 
       | Error msg ->
-         Printf.eprintf "Extraction failed: %s\n" msg;
+         Printf.eprintf "Extraction failed: %s\n%!" msg;
          1
   ) $ common_opts $ zip_path_arg)
 
@@ -126,14 +129,14 @@ let organize_cmd =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  Cmd.v info Term.(const (fun (verbose, custom_path, dry) ->
-    let cfg = load_config verbose custom_path in
-
+  Cmd.make info Term.(const (fun (v, custom_path, dry) ->
+    let cfg = load_config v custom_path in
+    let verbose = v || cfg.verbose in
     if verbose then begin
       Printf.printf "Organize mode\n";
       Printf.printf "  Source: %s\n" cfg.library_dir;
-      Printf.printf "  Target: %s\n" cfg.target_dir;
-      if dry then Printf.printf "  [dry-run] No files will be moved\n";
+      Printf.printf "  Target: %s\n%!" cfg.target_dir;
+      if dry then Printf.printf "  [dry-run] No files will be moved\n%!";
     end;
 
     try
@@ -151,51 +154,56 @@ let organize_cmd =
       in
 
       if verbose then
-        Printf.printf "Found %d candidate FB2 files\n" (List.length files);
+        Printf.printf "Found %d candidate FB2 files\n%!" (List.length files);
+      (* print_endline "Here"; *)
 
       let books = ref [] in
       let parse_failures = ref 0 in
 
       List.iter (fun path ->
         try
+          if verbose then
+            Printf.printf "Parsing: %s\n%!" path;
+          
           let author, title, _ = Ocaml_books.Fb2_parse.parse_title_author path in
+
           books := { author; title; path } :: !books;
           if verbose then
-            Printf.printf "Parsed: %s → %s\n" author title
+            Printf.printf "Parsed: %s → %s\n%!" author title
         with e ->
           incr parse_failures;
           if verbose then
-            Printf.eprintf "Parse failed: %s → %s\n" path (Printexc.to_string e)
+            Printf.eprintf "Parse failed: %s → %s\n%!" path (Printexc.to_string e)
       ) files;
 
       if !parse_failures > 0 then
-        Printf.eprintf "Warning: %d files failed to parse\n" !parse_failures;
+        Printf.eprintf "Warning: %d files failed to parse\n%!" !parse_failures;
 
-      let tbl = Ocaml_books.Organize.group_by_author !books in
+      (* let tbl = Ocaml_books.Organize.group_by_author !books in *)
 
-      AuthorTbl.iter (fun _key books ->
-        List.iter (fun b ->
-          let author_dir = Filename.concat cfg.target_dir (Ocaml_books.Fs.sanitize_filename b.author) in
-          let dest_name = Printf.sprintf "%s - %s.fb2"
-                            (Ocaml_books.Fs.sanitize_filename b.author)
-                            (Ocaml_books.Fs.sanitize_filename b.title) in
-          let dest_path = Filename.concat author_dir dest_name in
+      (* AuthorTbl.iter (fun _key books -> *)
+      (*   List.iter (fun b -> *)
+      (*     let author_dir = Filename.concat cfg.target_dir (Ocaml_books.Fs.sanitize_filename b.author) in *)
+      (*     let dest_name = Printf.sprintf "%s - %s.fb2" *)
+      (*                       (Ocaml_books.Fs.sanitize_filename b.author) *)
+      (*                       (Ocaml_books.Fs.sanitize_filename b.title) in *)
+      (*     let dest_path = Filename.concat author_dir dest_name in *)
 
-          if dry then
-            Printf.printf "[dry-run] Would move %s → %s\n" b.path dest_path
-          else begin
-            if verbose then Printf.printf "Moving %s → %s\n" b.path dest_path;
-            Ocaml_books.Fs.mkdir_p author_dir;
-            Sys.rename b.path dest_path
-          end
-        ) books
-      ) tbl;
+      (*     if dry then *)
+      (*       Printf.printf "[dry-run] Would move %s → %s\n%!" b.path dest_path *)
+      (*     else begin *)
+      (*       if verbose then Printf.printf "Moving %s → %s\n%!" b.path dest_path; *)
+      (*       Ocaml_books.Fs.mkdir_p author_dir; *)
+      (*       Sys.rename b.path dest_path *)
+      (*     end *)
+      (*   ) books *)
+      (* ) tbl; *)
 
-      Printf.printf "Organized %d books\n" (List.length !books);
+      (* Printf.printf "Organized %d books\n%!" (List.length !books); *)
       0
 
     with e ->
-      Printf.eprintf "Organize failed: %s\n" (Printexc.to_string e);
+      Printf.eprintf "Organize failed: %s\n%!" (Printexc.to_string e);
       1
   ) $ common_opts)
 
