@@ -3,3 +3,6 @@
  (libraries alcotest base core ocaml_books)
  (preprocess (pps ppx_deriving_yojson))
  )
+(rule
+ (alias runtest)                  ; ← dune test will run this
+ (action (run ./run_tests.exe)))  ; ← runs your alcotest binary
