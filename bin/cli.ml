@@ -5,6 +5,13 @@ open Ocaml_books.Config
 open Ocaml_books.Organize
 open Ocaml_books.Unzip
 
+(* Use standard library instead of Base/Core for CLI *)
+module Printf = Printf
+module Sys = Sys
+module Filename = Filename
+module Array = Array
+module List = List
+
 (* ────────────────────────────────────────────── *)
 (* Common options ───────────────────────────────── *)
 
@@ -56,7 +63,7 @@ let init_cmd =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  Cmd.make info Term.(const (fun (v, c, d) ->
+  Cmd.v info Term.(const (fun (v, c, d) ->
     if d then begin
       Printf.printf "[dry-run] Would create default config\n%!";
       0
@@ -93,7 +100,7 @@ let import_cmd =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  Cmd.make info Term.(const (fun (v, c, d) path ->
+  Cmd.v info Term.(const (fun (v, c, d) path ->
     let cfg = load_config v c in
     let verbose = v || cfg.verbose in
     if d then begin
@@ -129,7 +136,7 @@ let organize_cmd =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  Cmd.make info Term.(const (fun (v, custom_path, dry) ->
+  Cmd.v info Term.(const (fun (v, custom_path, dry) ->
     let cfg = load_config v custom_path in
     let verbose = v || cfg.verbose in
     if verbose then begin
@@ -155,31 +162,20 @@ let organize_cmd =
 
       if verbose then
         Printf.printf "Found %d candidate FB2 files\n%!" (List.length files);
-      (* print_endline "Here"; *)
 
-      let books = ref [] in
-      let parse_failures = ref 0 in
+      let books = 
+        List.fold_left
+          (fun accu path ->
+             if verbose then Printf.printf "Parsing: %s\n%!" path;          
+             let author, title = Ocaml_books.Fb2_parse.parse_title_author path in
+             let author = Option.value ~default:"UnknownAuthor" author
+             and title = Option.value ~default:"UnknownTitle" title in
+             { author; title; path } :: accu;)
+          []
+          files in
 
-      List.iter (fun path ->
-        try
-          if verbose then
-            Printf.printf "Parsing: %s\n%!" path;
-          
-          let author, title, _ = Ocaml_books.Fb2_parse.parse_title_author path in
-
-          books := { author; title; path } :: !books;
-          if verbose then
-            Printf.printf "Parsed: %s → %s\n%!" author title
-        with e ->
-          incr parse_failures;
-          if verbose then
-            Printf.eprintf "Parse failed: %s → %s\n%!" path (Printexc.to_string e)
-      ) files;
-
-      if !parse_failures > 0 then
-        Printf.eprintf "Warning: %d files failed to parse\n%!" !parse_failures;
-
-      (* let tbl = Ocaml_books.Organize.group_by_author !books in *)
+      ignore (Ocaml_books.Organize.group_by_author books);
+      (* let tbl = Ocaml_books.Organize.group_by_author books in *)
 
       (* AuthorTbl.iter (fun _key books -> *)
       (*   List.iter (fun b -> *)
@@ -199,7 +195,7 @@ let organize_cmd =
       (*   ) books *)
       (* ) tbl; *)
 
-      (* Printf.printf "Organized %d books\n%!" (List.length !books); *)
+      Printf.printf "Organized %d books\n%!" (List.length books);
       0
 
     with e ->
