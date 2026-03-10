@@ -174,26 +174,23 @@ let organize_cmd =
           []
           files in
 
-      ignore (Ocaml_books.Organize.group_by_author books);
-      (* let tbl = Ocaml_books.Organize.group_by_author books in *)
+      let tbl = Ocaml_books.Organize.group_by_author books in
 
-      (* AuthorTbl.iter (fun _key books -> *)
-      (*   List.iter (fun b -> *)
-      (*     let author_dir = Filename.concat cfg.target_dir (Ocaml_books.Fs.sanitize_filename b.author) in *)
-      (*     let dest_name = Printf.sprintf "%s - %s.fb2" *)
-      (*                       (Ocaml_books.Fs.sanitize_filename b.author) *)
-      (*                       (Ocaml_books.Fs.sanitize_filename b.title) in *)
-      (*     let dest_path = Filename.concat author_dir dest_name in *)
+      AuthorTbl.iter (fun _key books ->
+        List.iter (fun b ->
+          let author_dir = Filename.concat cfg.target_dir (Ocaml_books.Fs.sanitize_filename b.author) in
+          let dest_name = Printf.sprintf "%s.fb2" (Ocaml_books.Fs.sanitize_filename b.title) in
+          let dest_path = Filename.concat author_dir dest_name in
 
-      (*     if dry then *)
-      (*       Printf.printf "[dry-run] Would move %s → %s\n%!" b.path dest_path *)
-      (*     else begin *)
-      (*       if verbose then Printf.printf "Moving %s → %s\n%!" b.path dest_path; *)
-      (*       Ocaml_books.Fs.mkdir_p author_dir; *)
-      (*       Sys.rename b.path dest_path *)
-      (*     end *)
-      (*   ) books *)
-      (* ) tbl; *)
+          if dry then
+            Printf.printf "[dry-run] Would move %s → %s\n%!" b.path dest_path
+          else begin
+            if verbose then Printf.printf "Moving %s → %s\n%!" b.path dest_path;
+            Ocaml_books.Fs.mkdir_p author_dir;
+            Sys.rename b.path dest_path
+          end
+        ) books
+      ) tbl;
 
       Printf.printf "Organized %d books\n%!" (List.length books);
       0

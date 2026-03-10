@@ -1,11 +1,10 @@
 (*
-  Simplified FB2 parser using xmlm's built-in encoding detection.
+  FB2 parser supporting several XML Cyrillic encodings.
 *)
 
 open Base
 open Core
 open Xmlm
-(* open Ocaml_books.Recoding_channel *)
 
 exception Fb2_parse_error of string
 
@@ -21,11 +20,11 @@ let rec parse input handle path =
     handle None path' || parse input handle path'
   | `El_end ->
     (match path with
-     | [_] -> false (* Closing the root element, exiting *)
+     | [_] -> false (* We are closing the root element, exit *)
      | hd :: tl ->
        parse input handle tl
      | _ ->
-       failwith "Invalid XML: END without start")
+       failwith "Invalid XML: element END tag without START")
   | `Data txt ->
     let trimmed = String.strip txt in
     (not (String.is_empty trimmed) && handle (Some trimmed) path) || parse input handle path
@@ -71,27 +70,6 @@ let collect_title_info input =
     lang = !lang;
     genre = !genre;
   }
-
-
-(* let () = *)
-(*   In_channel.with_file "/tmp/books/incoming/701300.fb2" ~binary:true ~f: *)
-(*     (fun ic -> *)
-(*        let input = Xmlm.make_input (`Channel ic) in *)
-(*        if locate input ["title-info"; "description"; "FictionBook"] then *)
-(*          begin *)
-(*            let p = collect_title_info input in *)
-(*            printf "title = %s;\nfirst = %s;\nmiddle = %s;\nlast = %s;\ngenre = %s;\nlang = %s\n" *)
-(*              (Option.value ~default:"-" p.title) *)
-(*              (Option.value ~default:"-" p.first_name) *)
-(*              (Option.value ~default:"-" p.middle_name) *)
-(*              (Option.value ~default:"-" p.last_name) *)
-(*              (Option.value ~default:"-" p.genre) *)
-(*              (Option.value ~default:"-" p.lang) *)
-(*          end          *)
-(*        else *)
-(*          failwith "No title-info found" *)
-
-(*     ) *)
 
 (** [parse_title_author path] reads an FB2 file with automatic encoding detection.
 

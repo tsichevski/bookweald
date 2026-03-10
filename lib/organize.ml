@@ -7,7 +7,7 @@ type book = {
 }
 
 let group_by_author books =
-  let tbl = AuthorTbl.create 16 in
+  let tbl = AuthorTbl.create 128 in
   List.iter (fun b ->
     let key = String.lowercase_ascii b.author in
     let existing = AuthorTbl.find_opt tbl key |> Option.value ~default:[] in
