@@ -5,6 +5,7 @@
 open Base
 open Core
 open Xmlm
+(* open Ocaml_books.Recoding_channel *)
 
 exception Fb2_parse_error of string
 
@@ -12,10 +13,8 @@ let rec parse input handle path =
   let signal = Xmlm.input input in
   match signal with
   | `Dtd None -> 
-    Printf.printf "Empty DTD detected\n";
     parse input handle path
   | `Dtd (Some dtd) ->
-    Printf.printf "DTD detected %s\n" dtd;
     parse input handle path
   | `El_start ((_, tag), _) ->
     let path' = tag::path in
@@ -106,8 +105,19 @@ let collect_title_info input =
 let parse_title_author path =
   In_channel.with_file path ~binary:true ~f:
     (fun ic ->
-       let input = Xmlm.make_input (`Channel ic) in
-
+       let enc, _ = Xml_declaration.read_declaration ic in
+       let rindex = match enc with
+         | "utf-8" -> Recoding_channel.create_norecode ic
+         | "windows-1251" | "cp1251" -> Recoding_channel.create_cp1251 ic
+         | "koi8-r" -> Recoding_channel.create_koi8r ic
+         | _ -> failwith ("Unsupported encoding: " ^ enc)
+       in
+       let fn () =
+         match Recoding_channel.input_char rindex with
+         | None -> -1
+         | Some c -> Char.to_int c
+       in  
+       let input = Xmlm.make_input (`Fun fn) in
        if locate input ["title-info"; "description"; "FictionBook"] then
          let p = collect_title_info input in
          let author_parts = List.filter_map ~f:Fn.id ( [p.first_name; p.middle_name; p.last_name] )

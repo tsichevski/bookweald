@@ -1,38 +1,3 @@
-(**
-   Streaming decoder for legacy single-byte Russian encodings (CP1251 / KOI8-R)
-   to UTF-8 on-the-fly.
-
-   This module provides a thin wrapper around [In_channel.t] that reads data
-   in legacy Windows-1251 or KOI8-R encoding and delivers it as UTF-8 encoded
-   bytes, character by character.
-
-   Main usage patterns:
-
-   {v
-     (* CP1251 example *)
-     let decoder = create_cp1251 stdin in
-     while let Some c = input_char decoder do
-       Stdlib.print_char c
-     done;
-
-     (* KOI8-R example *)
-     let decoder = create_koi8r (In_channel.create ~binary:true "book.fb2") in
-     ...
-   v}
-
-   Features:
-   - Zero-cost passthrough for ASCII bytes (0x00–0x7F)
-   - Transparent conversion of high bytes (0x80–0xFF) to UTF-8 sequences
-   - Buffering of partial UTF-8 multi-byte sequences across calls
-   - CP1251: undefined code points mapped to U+FFFD (replacement character)
-   - KOI8-R: all code points defined (no replacement needed)
-
-   Limitations:
-   - Sequential forward reading only (no seeking, no position reporting)
-   - No error recovery for invalid input beyond replacement character
-   - Designed for metadata extraction (title/author), not full document parsing
- *)
-
 open Base
 
 (** Mapping table: Windows-1251 bytes 0x80–0xFF → Unicode scalar values.
@@ -222,44 +187,37 @@ let koi8r_to_uchar_array_rfc1489 : Uchar.t array =
     Uchar.of_scalar_exn 0x042D; Uchar.of_scalar_exn 0x0429; Uchar.of_scalar_exn 0x0427; Uchar.of_scalar_exn 0x042A;
   |]
 
-(** Decoder state: holds the chosen encoding table, underlying input channel
-    and a small buffer of pending UTF-8 bytes from the last converted character. *)
-type t = { table: Uchar.t array; input: In_channel.t; mutable last : char list }
+type t = { table: Uchar.t array option; input: In_channel.t; mutable last : char list }
 
-(** [create table input] creates a decoder using the given mapping table
-    and wraps the provided input channel. *)
 let create table input = { input; table; last = [] }
 
-(** [create_cp1251 input] creates a Windows-1251 → UTF-8 decoder. *)
-let create_cp1251 = create cp1251_to_uchar_array
+let create_cp1251 = create (Some cp1251_to_uchar_array)
 
-(** [create_koi8r input] creates a KOI8-R → UTF-8 decoder
-    (using the standard RFC 1489 mapping). *)
-let create_koi8r = create koi8r_to_uchar_array_rfc1489
+let create_koi8r = create (Some koi8r_to_uchar_array_rfc1489)
 
-(** [input_char t] reads and returns the next byte of the UTF-8 encoded stream.
+let create_norecode = create None
 
-    @return [Some c] — next UTF-8 byte
-    @return [None] — end of input reached
-*)
 let input_char t : char option =
-  let rec loop () =
-    match t.last with
-    | c::tl ->
-      t.last <- tl;
-      Some c
-    | [] ->
-      match In_channel.input_byte t.input with
-      | None -> None
-      | Some sc ->
-        if sc < 128 then
-          Char.of_int sc
-        else
-          begin
-            let uchar = t.table.(sc - 0x80) in
-            let s = Uchar.Utf8.to_string uchar in
-            t.last <- String.to_list s;
-            loop ()
-          end
-  in
-  loop ()
+  match t.table with
+  | None -> In_channel.input_char t.input
+  | Some table ->
+    let rec loop () =
+      match t.last with
+      | c::tl ->
+        t.last <- tl;
+        Some c
+      | [] ->
+        match In_channel.input_byte t.input with
+        | None -> None
+        | Some sc ->
+          if sc < 128 then
+            Char.of_int sc
+          else
+            begin
+              let uchar = table.(sc - 0x80) in
+              let s = Uchar.Utf8.to_string uchar in
+              t.last <- String.to_list s;
+              loop ()
+            end
+    in
+    loop ()

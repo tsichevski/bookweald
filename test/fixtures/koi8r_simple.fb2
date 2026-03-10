@@ -2,10 +2,10 @@
 <FictionBook>
   <description>
     <title-info>
-      <book-title>Test Book</book-title>
+      <book-title>Название книжки</book-title>
       <author>
-        <first-name>John</first-name>
-        <last-name>Doe</last-name>
+        <first-name>Лев</first-name>
+        <last-name>Толстой</last-name>
       </author>
     </title-info>
   </description>
