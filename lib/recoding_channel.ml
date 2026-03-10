@@ -1,33 +1,42 @@
 (**
-   CP1251 (Windows-1251) to UTF-8 on-the-fly decoder for streaming input.
+   Streaming decoder for legacy single-byte Russian encodings (CP1251 / KOI8-R)
+   to UTF-8 on-the-fly.
 
-   This module provides a thin wrapper around [In_channel.t] that reads legacy
-   Windows-1251 encoded data and delivers it as UTF-8 bytes character by character.
+   This module provides a thin wrapper around [In_channel.t] that reads data
+   in legacy Windows-1251 or KOI8-R encoding and delivers it as UTF-8 encoded
+   bytes, character by character.
 
-   Main usage pattern:
-   {[
-     let decoder = create stdin in
-     while let Some c = input_char decoder in
+   Main usage patterns:
+
+   {v
+     (* CP1251 example *)
+     let decoder = create_cp1251 stdin in
+     while let Some c = input_char decoder do
        Stdlib.print_char c
-     done
-   ]}
+     done;
+
+     (* KOI8-R example *)
+     let decoder = create_koi8r (In_channel.create ~binary:true "book.fb2") in
+     ...
+   v}
 
    Features:
-   - transparent conversion of single-byte CP1251 → multi-byte UTF-8
-   - correct handling of ASCII range (0x00–0x7F) with zero overhead
-   - undefined CP1251 bytes mapped to Unicode replacement character U+FFFD
-   - buffering of partial UTF-8 sequences across calls
+   - Zero-cost passthrough for ASCII bytes (0x00–0x7F)
+   - Transparent conversion of high bytes (0x80–0xFF) to UTF-8 sequences
+   - Buffering of partial UTF-8 multi-byte sequences across calls
+   - CP1251: undefined code points mapped to U+FFFD (replacement character)
+   - KOI8-R: all code points defined (no replacement needed)
 
    Limitations:
-   - Does not perform validation of malformed UTF-8 output
-   - Does not support seeking or position reporting
-   - Designed for sequential forward reading only
+   - Sequential forward reading only (no seeking, no position reporting)
+   - No error recovery for invalid input beyond replacement character
+   - Designed for metadata extraction (title/author), not full document parsing
  *)
 
 open Base
 
-(** Complete mapping: CP1251 bytes 0x80–0xFF → Unicode scalar values.
-    Bytes 0x00–0x7F are treated as ASCII and passed through unchanged. *)
+(** Mapping table: Windows-1251 bytes 0x80–0xFF → Unicode scalar values.
+    Bytes 0x00–0x7F are passed through unchanged (ASCII identity). *)
 let cp1251_to_uchar_array : Uchar.t array =
   [|
     (* 0x80 *)
@@ -165,17 +174,73 @@ let cp1251_to_uchar_array : Uchar.t array =
     Uchar.of_scalar_exn 0x044F; (* я *)
   |]
 
-(** Decoder state: wraps an input channel and holds pending UTF-8 bytes. *)
-type t = { input: In_channel.t; mutable last : char list }
+(** Mapping table: KOI8-R bytes 0x80–0xFF → Unicode scalar values.
+    Source: RFC 1489 (standard KOI8-R as implemented in GNU libiconv / glibc iconv).
+    All 128 high bytes are defined — no replacement characters needed.
+    Bytes 0x00–0x7F are passed through unchanged. *)
+let koi8r_to_uchar_array_rfc1489 : Uchar.t array =
+  [|
+    (* 0x80–0x8F *) (* box drawing, blocks *)
+    Uchar.of_scalar_exn 0x2500; Uchar.of_scalar_exn 0x2502; Uchar.of_scalar_exn 0x250C; Uchar.of_scalar_exn 0x2510;
+    Uchar.of_scalar_exn 0x2514; Uchar.of_scalar_exn 0x2518; Uchar.of_scalar_exn 0x251C; Uchar.of_scalar_exn 0x2524;
+    Uchar.of_scalar_exn 0x252C; Uchar.of_scalar_exn 0x2534; Uchar.of_scalar_exn 0x253C; Uchar.of_scalar_exn 0x2580;
+    Uchar.of_scalar_exn 0x2584; Uchar.of_scalar_exn 0x2588; Uchar.of_scalar_exn 0x258C; Uchar.of_scalar_exn 0x2590;
+    (* 0x90–0x9F *) (* shades, math, etc. *)
+    Uchar.of_scalar_exn 0x2591; Uchar.of_scalar_exn 0x2592; Uchar.of_scalar_exn 0x2593; Uchar.of_scalar_exn 0x2320;
+    Uchar.of_scalar_exn 0x25A0; Uchar.of_scalar_exn 0x2219; Uchar.of_scalar_exn 0x221A; Uchar.of_scalar_exn 0x2248;
+    Uchar.of_scalar_exn 0x2264; Uchar.of_scalar_exn 0x2265; Uchar.of_scalar_exn 0x00A0; Uchar.of_scalar_exn 0x2321;
+    Uchar.of_scalar_exn 0x00B0; Uchar.of_scalar_exn 0x00B2; Uchar.of_scalar_exn 0x00B7; Uchar.of_scalar_exn 0x00F7;
+    (* 0xA0–0xAF *) (* more box drawing + Ё/ё + © *)
+    Uchar.of_scalar_exn 0x2550; Uchar.of_scalar_exn 0x2551; Uchar.of_scalar_exn 0x2552; Uchar.of_scalar_exn 0x0451;
+    Uchar.of_scalar_exn 0x2553; Uchar.of_scalar_exn 0x2554; Uchar.of_scalar_exn 0x2555; Uchar.of_scalar_exn 0x2556;
+    Uchar.of_scalar_exn 0x2557; Uchar.of_scalar_exn 0x2558; Uchar.of_scalar_exn 0x2559; Uchar.of_scalar_exn 0x255A;
+    Uchar.of_scalar_exn 0x255B; Uchar.of_scalar_exn 0x255C; Uchar.of_scalar_exn 0x255D; Uchar.of_scalar_exn 0x255E;
+    (* 0xB0–0xBF *)
+    Uchar.of_scalar_exn 0x255F; Uchar.of_scalar_exn 0x2560; Uchar.of_scalar_exn 0x2561; Uchar.of_scalar_exn 0x0401;
+    Uchar.of_scalar_exn 0x2562; Uchar.of_scalar_exn 0x2563; Uchar.of_scalar_exn 0x2564; Uchar.of_scalar_exn 0x2565;
+    Uchar.of_scalar_exn 0x2566; Uchar.of_scalar_exn 0x2567; Uchar.of_scalar_exn 0x2568; Uchar.of_scalar_exn 0x2569;
+    Uchar.of_scalar_exn 0x256A; Uchar.of_scalar_exn 0x256B; Uchar.of_scalar_exn 0x256C; Uchar.of_scalar_exn 0x00A9;
+    (* 0xC0–0xCF *) (* lowercase Cyrillic *)
+    Uchar.of_scalar_exn 0x044E; Uchar.of_scalar_exn 0x0430; Uchar.of_scalar_exn 0x0431; Uchar.of_scalar_exn 0x0446;
+    Uchar.of_scalar_exn 0x0434; Uchar.of_scalar_exn 0x0435; Uchar.of_scalar_exn 0x0444; Uchar.of_scalar_exn 0x0433;
+    Uchar.of_scalar_exn 0x0445; Uchar.of_scalar_exn 0x0438; Uchar.of_scalar_exn 0x0439; Uchar.of_scalar_exn 0x043A;
+    Uchar.of_scalar_exn 0x043B; Uchar.of_scalar_exn 0x043C; Uchar.of_scalar_exn 0x043D; Uchar.of_scalar_exn 0x043E;
+    (* 0xD0–0xDF *)
+    Uchar.of_scalar_exn 0x043F; Uchar.of_scalar_exn 0x044F; Uchar.of_scalar_exn 0x0440; Uchar.of_scalar_exn 0x0441;
+    Uchar.of_scalar_exn 0x0442; Uchar.of_scalar_exn 0x0443; Uchar.of_scalar_exn 0x0436; Uchar.of_scalar_exn 0x0432;
+    Uchar.of_scalar_exn 0x044C; Uchar.of_scalar_exn 0x044B; Uchar.of_scalar_exn 0x0437; Uchar.of_scalar_exn 0x0448;
+    Uchar.of_scalar_exn 0x044D; Uchar.of_scalar_exn 0x0449; Uchar.of_scalar_exn 0x0447; Uchar.of_scalar_exn 0x044A;
+    (* 0xE0–0xEF *) (* uppercase Cyrillic *)
+    Uchar.of_scalar_exn 0x042E; Uchar.of_scalar_exn 0x0410; Uchar.of_scalar_exn 0x0411; Uchar.of_scalar_exn 0x0426;
+    Uchar.of_scalar_exn 0x0414; Uchar.of_scalar_exn 0x0415; Uchar.of_scalar_exn 0x0424; Uchar.of_scalar_exn 0x0413;
+    Uchar.of_scalar_exn 0x0425; Uchar.of_scalar_exn 0x0418; Uchar.of_scalar_exn 0x0419; Uchar.of_scalar_exn 0x041A;
+    Uchar.of_scalar_exn 0x041B; Uchar.of_scalar_exn 0x041C; Uchar.of_scalar_exn 0x041D; Uchar.of_scalar_exn 0x041E;
+    (* 0xF0–0xFF *)
+    Uchar.of_scalar_exn 0x041F; Uchar.of_scalar_exn 0x042F; Uchar.of_scalar_exn 0x0420; Uchar.of_scalar_exn 0x0421;
+    Uchar.of_scalar_exn 0x0422; Uchar.of_scalar_exn 0x0423; Uchar.of_scalar_exn 0x0416; Uchar.of_scalar_exn 0x0412;
+    Uchar.of_scalar_exn 0x042C; Uchar.of_scalar_exn 0x042B; Uchar.of_scalar_exn 0x0417; Uchar.of_scalar_exn 0x0428;
+    Uchar.of_scalar_exn 0x042D; Uchar.of_scalar_exn 0x0429; Uchar.of_scalar_exn 0x0427; Uchar.of_scalar_exn 0x042A;
+  |]
 
-(** [create input] wraps an existing input channel with CP1251→UTF-8 decoding. *)
-let create input = { input; last = [] }
+(** Decoder state: holds the chosen encoding table, underlying input channel
+    and a small buffer of pending UTF-8 bytes from the last converted character. *)
+type t = { table: Uchar.t array; input: In_channel.t; mutable last : char list }
 
-(** [input_char t] reads the next UTF-8 byte from the decoded stream.
+(** [create table input] creates a decoder using the given mapping table
+    and wraps the provided input channel. *)
+let create table input = { input; table; last = [] }
 
-    - Returns [Some c] if a byte is available
-    - Returns [None] on end of file
-    - May perform multiple underlying reads when crossing a character boundary
+(** [create_cp1251 input] creates a Windows-1251 → UTF-8 decoder. *)
+let create_cp1251 = create cp1251_to_uchar_array
+
+(** [create_koi8r input] creates a KOI8-R → UTF-8 decoder
+    (using the standard RFC 1489 mapping). *)
+let create_koi8r = create koi8r_to_uchar_array_rfc1489
+
+(** [input_char t] reads and returns the next byte of the UTF-8 encoded stream.
+
+    @return [Some c] — next UTF-8 byte
+    @return [None] — end of input reached
 *)
 let input_char t : char option =
   let rec loop () =
@@ -191,7 +256,7 @@ let input_char t : char option =
           Char.of_int sc
         else
           begin
-            let uchar = cp1251_to_uchar_array.(sc - 0x80) in
+            let uchar = t.table.(sc - 0x80) in
             let s = Uchar.Utf8.to_string uchar in
             t.last <- String.to_list s;
             loop ()

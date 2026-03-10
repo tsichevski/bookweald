@@ -1,3 +1,11 @@
+2026-03-10  Vladimir Tsichevski  <Vladimir Tsichevski <vvt@goldencode.com>>
+
+	* Recoding to UTF8 testing problem: I use iconv to create files with expected recoding to utf8 result. Seems iconv has a bug: it stops immediately on some unsupported character:
+
+	iconv: illegal input sequence at position 24
+
+	I need 
+
 2026-02-24  Vladimir Tsichevski  <Vladimir Tsichevski <vvt@goldencode.com>>
 
 	* calmzip failed on fb2-799407-801214.zip: Unknown ZIP version
