@@ -53,16 +53,21 @@ let collect_title_info input =
        | None -> ()
        | Some v ->
          match path with
-         | ["first-name"; "author"; "title-info"] -> first_name := txt
-         | ["last-name"; "author"; "title-info"] -> last_name := txt
-         | ["middle-name";"author"; "title-info"] -> middle_name := txt
-         | ["book-title"; "title-info"]  -> title := txt
-         | ["lang"; "title-info"]  -> lang := txt
-         | ["genre"; "title-info"]  -> genre := txt
+         | ["first-name"; "author"; "title-info"; "description"] -> first_name := txt
+         | ["last-name"; "author"; "title-info"; "description"] -> last_name := txt
+         | ["middle-name";"author"; "title-info"; "description"] -> middle_name := txt
+         | ["book-title"; "title-info"; "description"]  -> title := txt
+         | ["lang"; "title-info"; "description"]  -> lang := txt
+         | ["genre"; "title-info"; "description"]  -> genre := txt
+             
+         (* Sometimes the author element is in the document-info *)
+         | ["first-name"; "author"; "document-info"; "description"] -> first_name := txt
+         | ["last-name"; "author"; "document-info"; "description"] -> last_name := txt
+         | ["middle-name";"author"; "document-info"; "description"] -> middle_name := txt
          | _ -> ()
       );
       false)
-      ["title-info"]);
+      ["description"]);
   { title = !title;
     first_name = !first_name;
     middle_name = !middle_name;
@@ -96,7 +101,7 @@ let parse_title_author path =
          | Some c -> c
        in  
        let input = Xmlm.make_input (`Fun fn) in
-       if locate input ["title-info"; "description"; "FictionBook"] then
+       if locate input ["description"; "FictionBook"] then
          let p = collect_title_info input in
          let author_parts = List.filter_map ~f:Fn.id ( [p.first_name; p.middle_name; p.last_name] )
          in
@@ -106,5 +111,5 @@ let parse_title_author path =
          in
          (author, p.title)
        else
-         raise (Fb2_parse_error (sprintf "%s: no 'title-info' XML element found" path))
+         raise (Fb2_parse_error (sprintf "%s: no 'description' XML element found" path))
     );
