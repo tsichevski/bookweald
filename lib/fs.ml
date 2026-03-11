@@ -1,5 +1,3 @@
-(* lib/fs.ml *)
-
 (* File system utilities: directory creation, filename sanitization, and file type checks.
    Used for safe FS operations in the book library manager.
 
@@ -31,8 +29,8 @@ let mkdir_p ?(perm = 0o755) path =
       with
       | Unix.Unix_error (Unix.EEXIST, _, _) -> ()  (* race condition: already created *)
       | Unix.Unix_error (e, f, arg) ->
-          failwith (Printf.sprintf "Unix.mkdir failed (%s): %s %s"
-                      (Unix.error_message e) f arg)
+        failwith (Printf.sprintf "Unix.mkdir failed (%s): %s %s"
+          (Unix.error_message e) f arg)
   in
   create path
 

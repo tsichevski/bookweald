@@ -1,13 +1,38 @@
-2026-03-10  Vladimir Tsichevski  <Vladimir Tsichevski <vvt@goldencode.com>>
+2026-03-11  Vladimir Tsichevski  <Vladimir Tsichevski <vvt@goldencode.com>>
 
-	* Recoding to UTF8 testing problem: I use iconv to create files with expected recoding to utf8 result. Seems iconv has a bug: it stops immediately on some unsupported character:
+	* Author info extraction problems:
 
-	iconv: illegal input sequence at position 24
+	-- there may be more than one author in the title-info element
+	-- the author element in document-info may be broken
 
-	I need 
+	Example:
+	 <description>
+  <title-info>
+   <author>
+    <first-name>Владимир</first-name>
+    <middle-name>Иванович</middle-name>
+    <last-name>Дмитревский</last-name>
+   </author>
+   <author>
+    <first-name>Борис</first-name>
+    <middle-name>Дмитриевич</middle-name>
+    <last-name>Четвериков</last-name>
+   </author>
+  </title-info>
+  <document-info>
+   <author>
+    <first-name>Alexx</first-name>
+    <last-name></last-name>
+   </author>
+  </document-info>
+
+	We have to:
+
+	-- collect all <author> elements to autor list
+	-- use the first author in the list to form the catalog name
 
 2026-02-24  Vladimir Tsichevski  <Vladimir Tsichevski <vvt@goldencode.com>>
 
 	* calmzip failed on fb2-799407-801214.zip: Unknown ZIP version
-	The file is correc
+	The file is correct
 

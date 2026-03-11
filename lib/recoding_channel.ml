@@ -143,7 +143,7 @@ let cp1251_to_uchar_array : Uchar.t array =
     Source: RFC 1489 (standard KOI8-R as implemented in GNU libiconv / glibc iconv).
     All 128 high bytes are defined — no replacement characters needed.
     Bytes 0x00–0x7F are passed through unchanged. *)
-let koi8r_to_uchar_array_rfc1489 : Uchar.t array =
+let koi8r_to_uchar_array : Uchar.t array =
   [|
     (* 0x80–0x8F *) (* box drawing, blocks *)
     Uchar.of_scalar_exn 0x2500; Uchar.of_scalar_exn 0x2502; Uchar.of_scalar_exn 0x250C; Uchar.of_scalar_exn 0x2510;
@@ -193,9 +193,9 @@ let create table input = { input; table; last = [] }
 
 let create_cp1251 = create (Some cp1251_to_uchar_array)
 
-let create_koi8r = create (Some koi8r_to_uchar_array_rfc1489)
+let create_koi8r = create (Some koi8r_to_uchar_array)
 
-let create_norecode = create None
+let create_direct = create None
 
 let input_byte t : int option =
   match t.table with

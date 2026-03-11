@@ -94,4 +94,3 @@ let read_declaration (ic : Core.In_channel.t) : string * string =
       Buffer.add_bytes buf magic;
       read_until_marker_exn ic buf
     end
-

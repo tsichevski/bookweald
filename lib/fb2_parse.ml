@@ -1,7 +1,3 @@
-(*
-  FB2 parser supporting several XML Cyrillic encodings.
-*)
-
 open Base
 open Core
 open Xmlm
@@ -42,27 +38,27 @@ type title_info = {
 
 (** Parse the title-info element contents *)
 let collect_title_info input =
-  let title = ref None
-  and first_name = ref None
+  let title       = ref None
+  and first_name  = ref None
   and middle_name = ref None
-  and last_name = ref None
-  and lang = ref None
-  and genre = ref None in
+  and last_name   = ref None
+  and lang        = ref None
+  and genre       = ref None in
   ignore (parse input (fun txt path ->
       (match txt with
        | None -> ()
        | Some v ->
          match path with
          | ["first-name"; "author"; "title-info"; "description"] -> first_name := txt
-         | ["last-name"; "author"; "title-info"; "description"] -> last_name := txt
+         | ["last-name"; "author"; "title-info"; "description"]  -> last_name := txt
          | ["middle-name";"author"; "title-info"; "description"] -> middle_name := txt
-         | ["book-title"; "title-info"; "description"]  -> title := txt
-         | ["lang"; "title-info"; "description"]  -> lang := txt
-         | ["genre"; "title-info"; "description"]  -> genre := txt
+         | ["book-title"; "title-info"; "description"]           -> title := txt
+         | ["lang"; "title-info"; "description"]                 -> lang := txt
+         | ["genre"; "title-info"; "description"]                -> genre := txt
              
          (* Sometimes the author element is in the document-info *)
          | ["first-name"; "author"; "document-info"; "description"] -> first_name := txt
-         | ["last-name"; "author"; "document-info"; "description"] -> last_name := txt
+         | ["last-name"; "author"; "document-info"; "description"]  -> last_name := txt
          | ["middle-name";"author"; "document-info"; "description"] -> middle_name := txt
          | _ -> ()
       );
@@ -76,21 +72,12 @@ let collect_title_info input =
     genre = !genre;
   }
 
-(** [parse_title_author path] reads an FB2 file with automatic encoding detection.
-
-    Uses xmlm which automatically:
-    - Detects encoding from <?xml encoding="..."?>
-    - Converts to UTF-8 internally
-    - Provides streaming (SAX-style) event parsing
-
-    Returns (author_name, title) tuple.
-*)
 let parse_title_author path =
   In_channel.with_file path ~binary:true ~f:
     (fun ic ->
        let enc, _ = Xml_declaration.read_declaration ic in
        let rindex = match enc with
-         | "utf-8" -> Recoding_channel.create_norecode ic
+         | "utf-8" -> Recoding_channel.create_direct ic
          | "windows-1251" | "cp1251" -> Recoding_channel.create_cp1251 ic
          | "koi8-r" -> Recoding_channel.create_koi8r ic
          | _ -> failwith ("Unsupported encoding: " ^ enc)

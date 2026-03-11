@@ -33,14 +33,14 @@
    - Designed for metadata extraction (title/author), not full document parsing
  *)
 
-(* open Base *)
+open Core
 
 (** Decoder state: holds the chosen encoding table, underlying input channel
     and a small buffer of pending UTF-8 bytes from the last converted character. *)
 type t
 
-(** [create_norecode] creates a no-recoding decoder to handle UTF-8. *)
-val create_norecode : In_channel.t -> t
+(** [create_norecode] creates a no-recoding UTF-8 → UTF-8 decoder. *)
+val create_direct : In_channel.t -> t
 
 (** [create_cp1251 input] creates a Windows-1251 → UTF-8 decoder. *)
 val create_cp1251 : In_channel.t -> t
