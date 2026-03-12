@@ -33,8 +33,6 @@
    - Designed for metadata extraction (title/author), not full document parsing
  *)
 
-open Core
-
 (** Decoder state: holds the chosen encoding table, underlying input channel
     and a small buffer of pending UTF-8 bytes from the last converted character. *)
 type t

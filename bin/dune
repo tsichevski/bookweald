@@ -1,4 +1,6 @@
 (executable
  (public_name ocaml-books)
  (name cli)
+ (modes byte exe)
+ (flags :standard -g)
  (libraries ocaml_books zipc cmdliner))

@@ -2,6 +2,8 @@
 
 (name ocaml-books)
 
+(wrapped_executables false)
+
 (generate_opam_files true)
 
 (source

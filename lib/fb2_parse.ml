@@ -1,5 +1,3 @@
-open Base
-open Core
 open Xmlm
 
 exception Fb2_parse_error of string
@@ -22,8 +20,8 @@ let rec parse input handle path =
      | _ ->
        failwith "Invalid XML: element END tag without START")
   | `Data txt ->
-    let trimmed = String.strip txt in
-    (not (String.is_empty trimmed) && handle (Some trimmed) path) || parse input handle path
+    let trimmed = String.trim txt in
+    (not (String.(empty = trimmed)) && handle (Some trimmed) path) || parse input handle path
 
 let locate input path = parse input (fun txt path' -> List.equal String.equal path path') []
 
@@ -73,7 +71,7 @@ let collect_title_info input =
   }
 
 let parse_title_author path =
-  In_channel.with_file path ~binary:true ~f:
+  In_channel.with_open_bin path 
     (fun ic ->
        let enc, _ = Xml_declaration.read_declaration ic in
        let rindex = match enc with
@@ -84,19 +82,19 @@ let parse_title_author path =
        in
        let fn () =
          match Recoding_channel.input_byte rindex with
-         | None -> -1
+         | None -> raise End_of_file
          | Some c -> c
        in  
        let input = Xmlm.make_input (`Fun fn) in
        if locate input ["description"; "FictionBook"] then
          let p = collect_title_info input in
-         let author_parts = List.filter_map ~f:Fn.id ( [p.first_name; p.middle_name; p.last_name] )
+         let author_parts = List.filter_map Fun.id ( [p.first_name; p.middle_name; p.last_name] )
          in
          let author = match author_parts with
            | [] -> None
-           | parts -> Some (String.concat ~sep:" " parts)
+           | parts -> Some (String.concat " " parts)
          in
          (author, p.title)
        else
-         raise (Fb2_parse_error (sprintf "%s: no 'description' XML element found" path))
+         raise (Fb2_parse_error (Printf.sprintf "%s: no 'description' XML element found" path))
     );

@@ -1,13 +1,11 @@
 open Alcotest
-open Base
 open Ocaml_books.Recoding_channel
 
-let bytes_to_string bytes = String.concat ~sep:""
-    (List.map bytes
-       ~f:(fun c ->
-           match Char.of_int c with
-           | None -> failwith "Cannot convert int to char"
-           | Some c -> String.make 1 c))
+let bytes_to_string bytes : string = String.concat
+  ""
+  (List.map
+    (fun c -> String.make 1 (Char.chr c))
+    bytes)
 
 let recode_stream rc =
   let rec loop accu =
@@ -19,7 +17,7 @@ let recode_stream rc =
   bytes_to_string (List.rev (loop []))
     
 let read_whole_binary_file (path : string) : string =
-  Core.In_channel.with_file ~binary:true path ~f:In_channel.input_all
+  In_channel.with_open_bin path In_channel.input_all
 
 let test_cp1251 () =
   let input = In_channel.open_bin "../../../test/fixtures/cp1251_cp1251.txt" in

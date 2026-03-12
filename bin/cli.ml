@@ -5,13 +5,6 @@ open Ocaml_books.Config
 open Ocaml_books.Organize
 open Ocaml_books.Unzip
 
-(* Use standard library instead of Base/Core for CLI *)
-module Printf = Printf
-module Sys = Sys
-module Filename = Filename
-module Array = Array
-module List = List
-
 (* ────────────────────────────────────────────── *)
 (* Common options ───────────────────────────────── *)
 
