@@ -11,6 +11,7 @@ let rec parse input handle path =
   | `Dtd (Some dtd) ->
     parse input handle path
   | `El_start ((_, tag), _) ->
+    (* Printf.printf "Tag %s [%s]\n" tag (String.concat "/" path); *)
     let path' = tag::path in
     handle None path' || parse input handle path'
   | `El_end ->
@@ -80,24 +81,35 @@ let collect_title_info input =
     genre = !genre;
   }
 
-let parse_title_author path =
+let parse_visit path h =
   In_channel.with_open_bin path 
     (fun ic ->
-       let enc, _ = Xml_declaration.read_declaration ic in
-       let rindex = match enc with
-         | "utf-8" -> Recoding_channel.create_direct ic
-         | "windows-1251" | "cp1251" -> Recoding_channel.create_cp1251 ic
-         | "koi8-r" -> Recoding_channel.create_koi8r ic
-         | _ -> failwith ("Unsupported encoding: " ^ enc)
-       in
-       let fn () =
-         match Recoding_channel.input_byte rindex with
-         | None -> raise End_of_file
-         | Some c -> c
-       in  
-       let input = Xmlm.make_input (`Fun fn) in
-       if locate input ["description"; "FictionBook"] then
+      let enc, _ = Xml_declaration.read_declaration ic in
+      (* Printf.printf "Encoding: %s" enc; *)
+      let rindex = match enc with
+      | "utf-8" -> Recoding_channel.create_direct ic
+      | "windows-1251" | "cp1251" -> Recoding_channel.create_cp1251 ic
+      | "koi8-r" -> Recoding_channel.create_koi8r ic
+      | _ -> failwith ("Unsupported encoding: " ^ enc)
+      in
+      let fn () =
+        match Recoding_channel.input_byte rindex with
+        | None -> raise End_of_file
+        | Some c -> c
+      in  
+      let input = Xmlm.make_input (`Fun fn) in
+      h input
+    )
+
+let validate path =
+  parse_visit path (fun input -> ignore(parse input (fun _ _ -> false)  []))
+
+let parse_title_author path =
+  parse_visit path
+    (fun input ->
+      if locate input ["description"; "FictionBook"] then
          collect_title_info input
        else
          raise (Fb2_parse_error (Printf.sprintf "%s: no 'description' XML element found" path))
-    );
+    )
+

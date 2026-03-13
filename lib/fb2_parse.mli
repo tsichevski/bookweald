@@ -29,3 +29,5 @@ open Book
     @raise Failure if the declared encoding is unsupported
 *)
 val parse_title_author : string -> title_info
+
+val validate : string -> unit

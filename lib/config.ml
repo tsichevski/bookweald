@@ -15,6 +15,7 @@
 type t = {
   library_dir     : string;             (* Source directory with ZIPs or raw FB2 files *)
   target_dir      : string;             (* Destination directory for organized books *)
+  invalid_dir     : string;             (* Destination directory for files failded validation *)
   dry_run         : bool;               (* If true: simulate actions without changes *)
   verbose         : bool;               (* If true: print detailed progress info *)
   max_component_len: int;               (* Maximum length of one filename component or 0 (default) for no limit *)
@@ -24,6 +25,7 @@ type t = {
 let default () : t = {
   library_dir      = Filename.concat (Sys.getenv "HOME") "books/incoming";
   target_dir       = Filename.concat (Sys.getenv "HOME") "books/organized";
+  invalid_dir      = Filename.concat (Sys.getenv "HOME") "books/invalid";
   dry_run          = false;
   verbose          = true;
   max_component_len = 0;

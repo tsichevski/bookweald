@@ -4,6 +4,7 @@ open Cmdliner
 open Ocaml_books.Config
 open Ocaml_books.Unzip
 open Ocaml_books.Book
+open Ocaml_books.Fs
 
 (* Common options ───────────────────────────────── *)
 
@@ -191,6 +192,89 @@ let organize_cmd =
       1
   ) $ common_opts)
 
+let validate_cmd =
+  let doc = "Validate all FB2 files in library_dir for XML and basic FB2 conformance" in
+  let man = [
+    `S Manpage.s_description;
+    `P "Fully parses each .fb2 file.";
+    `P "Files that fail validation are moved to invalid_dir.";
+    `P "Respects --dry-run (only prints actions).";
+  ] in
+  let info = Cmd.info "validate" ~doc ~man ~exits:Cmd.Exit.defaults in
+  Cmd.v info Term.(const (fun (v, custom_path, dry, max_component_len) ->
+    let cfg = load_config v custom_path in
+    let verbose = v || cfg.verbose in
+    if verbose then begin
+      Printf.printf "Validate mode\n";
+      Printf.printf "  Scanning: %s\n" cfg.library_dir;
+      Printf.printf "  Failed files go to: %s\n" cfg.invalid_dir;
+      if dry then Printf.printf "  [dry-run] No files will be moved\n";
+      Out_channel.flush stdout;
+    end;
+
+    try
+
+      let fb2_files = ref [] in
+
+      let rec scan dir =
+        let entries = Sys.readdir dir in
+        Array.iter (fun name ->
+          let path = Filename.concat dir name in
+          if Sys.is_directory path then
+            scan path
+          else if Ocaml_books.Fs.is_regular_file path && Filename.check_suffix path ".fb2" then
+            fb2_files := path :: !fb2_files
+        ) entries
+      in
+
+      scan cfg.library_dir;
+
+      let total = List.length !fb2_files in
+      if verbose then begin
+        Printf.printf "Found %d .fb2 files\n" total;
+        Out_channel.flush stdout;
+      end;
+
+      let failures = ref 0 in
+
+      List.iter (fun path ->
+        try
+          Ocaml_books.Fb2_parse.validate path;
+          if verbose then begin
+            Printf.printf "%s → OK\n" (Filename.basename path);
+            Out_channel.flush stdout;
+          end;
+        with e ->
+          incr failures;
+          let reason = Printexc.to_string e in
+          Printf.eprintf "%s → FAILED: %s\n" (Filename.basename path) reason;
+
+          if not dry then begin
+            let dest_name = Filename.basename path in
+            let dest_path = Filename.concat cfg.invalid_dir dest_name in
+            Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
+            Sys.rename path dest_path;
+            if verbose then begin
+              Printf.printf "  → Moved %s to %s\n" path dest_path;
+              Out_channel.flush stdout;
+            end
+          end
+      ) !fb2_files;
+
+      if !failures > 0 then
+        Printf.printf "Validation complete: %d/%d files failed\n" !failures total
+      else
+        Printf.printf "All %d files validated successfully\n" total;
+      Out_channel.flush stdout;
+
+      0
+
+    with e ->
+      Printf.eprintf "Validate failed: %s\n" (Printexc.to_string e);
+      Out_channel.flush stderr;
+      1
+  ) $ common_opts)
+  
 (* Main program *)
 
 let main () =
@@ -212,7 +296,7 @@ let main () =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  let cmd = Cmd.group main_info @@ [init_cmd; import_cmd; organize_cmd] in
+  let cmd = Cmd.group main_info @@ [init_cmd; import_cmd; organize_cmd; validate_cmd] in
   Cmd.eval' cmd
 
 let () = if !Sys.interactive then () else exit (main ())
