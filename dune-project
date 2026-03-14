@@ -21,7 +21,12 @@
  (name ocaml-books)
  (synopsis "Home Book Library Management Project")
  (description "Manage Personal Book Repository in FB2 Format")
- (depends ocaml)
+ (depends
+  (ocaml (>= 5.0.0))
+  camlzip
+  (cmdliner (>= 1.2.0))
+  (domainslib (>= 0.5.0)))
+
  (tags
   ("ocaml" "books")))
 

@@ -19,6 +19,7 @@ type t = {
   dry_run         : bool;               (* If true: simulate actions without changes *)
   verbose         : bool;               (* If true: print detailed progress info *)
   max_component_len: int;               (* Maximum length of one filename component or 0 (default) for no limit *)
+  jobs: int;                            (* Number of jobs domain pool, 1 to disable parallelism *)
 } [@@deriving yojson { strict = false }]
 
 (** [default ()] returns the hardcoded default configuration values. *)
@@ -29,6 +30,7 @@ let default () : t = {
   dry_run          = false;
   verbose          = true;
   max_component_len = 0;
+  jobs             = 1;
 }
 
 (** [config_file_locations ()] returns the list of standard config file paths to check. *)

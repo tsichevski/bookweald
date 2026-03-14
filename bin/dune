@@ -3,4 +3,4 @@
  (name cli)
  (modes byte exe)
  (flags :standard -g)
- (libraries ocaml_books zipc cmdliner))
+ (libraries ocaml_books zipc cmdliner domainslib))

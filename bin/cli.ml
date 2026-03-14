@@ -20,15 +20,18 @@ let dry_run =
   let doc = "Do not perform any real file operations (simulation mode)" in
   Arg.(value & flag & info ["dry-run"] ~doc)
 
-(* bin/cli.ml — fragment *)
-
 let max_component_len =
   let doc = "Maximum allowed length of any filename or directory component (in bytes). 0 = no limit (default)." in
   Arg.(value & opt int 0 & info ["m"; "max-component-len"] ~docv:"N" ~doc)
 
+let jobs =
+  let doc = "Maximum number of domains/threads to use for parallel work. \
+             Use 1 to disable parallelism. Default → use recommended count." in
+  Arg.(value & opt int (Domain.recommended_domain_count ()) & info ["j"; "jobs"] ~docv:"N" ~doc)
+
 let common_opts =
-  Term.(const (fun v c d m -> (v, c, d, m))
-        $ verbose $ config_opt $ dry_run $ max_component_len)
+  Term.(const (fun v c d m j -> (v, c, d, m, j))
+        $ verbose $ config_opt $ dry_run $ max_component_len $ jobs)
 
 (* Helper: load config with fallback & verbose log *)
 
@@ -44,9 +47,9 @@ let load_config verbose custom_path =
       if verbose then Printf.printf "Loading config from default locations\n%!";
       Ocaml_books.Config.load ()
 
+module T = Domainslib.Task
 
 (* init command *)
-
 let init_cmd =
   let doc = "Initialize default configuration file" in
   let man = [
@@ -59,7 +62,7 @@ let init_cmd =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  Cmd.v info Term.(const (fun (v, c, d, m) ->
+  Cmd.v info Term.(const (fun (v, c, d, m, j) ->
     if d then begin
       Printf.printf "[dry-run] Would create default config\n%!";
       0
@@ -78,7 +81,6 @@ let init_cmd =
 
 
 (* import command *)
-
 let zip_path_arg =
   let doc = "Path to ZIP file or directory containing ZIP archives" in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"PATH" ~doc)
@@ -95,7 +97,7 @@ let import_cmd =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  Cmd.v info Term.(const (fun (v, c, d, m) path ->
+  Cmd.v info Term.(const (fun (v, c, d, m, j) path ->
     let cfg = load_config v c in
     let verbose = v || cfg.verbose in
     if d then begin
@@ -115,7 +117,6 @@ let import_cmd =
 
 
 (* organize command *)
-
 let organize_cmd =
   let doc = "Parse FB2 files and move them into author-named subdirectories" in
   let man = [
@@ -130,7 +131,7 @@ let organize_cmd =
       ~man
       ~exits:Cmd.Exit.defaults
   in
-  Cmd.v info Term.(const (fun (v, custom_path, dry, max_component_len) ->
+  Cmd.v info Term.(const (fun (v, custom_path, dry, max_component_len, jobs) ->
     let cfg = load_config v custom_path in
     let verbose = v || cfg.verbose in
     let max_component_len = if max_component_len = 0 then cfg.max_component_len else max_component_len in
@@ -192,6 +193,15 @@ let organize_cmd =
       1
   ) $ common_opts)
 
+let parmap ?(chunk_size=10) pool f lst =
+  let arr = Array.of_list lst in
+  let len = Array.length arr in
+  let result = Array.make len (Obj.magic 0) in  (* Unsafe init; set all slots immediately below. Fine for perf-critical code. *)
+  T.parallel_for ~chunk_size ~start:0 ~finish:(len - 1) ~body:(fun i ->
+    result.(i) <- f arr.(i)
+  ) pool;
+  Array.to_list result
+
 let validate_cmd =
   let doc = "Validate all FB2 files in library_dir for XML and basic FB2 conformance" in
   let man = [
@@ -201,13 +211,15 @@ let validate_cmd =
     `P "Respects --dry-run (only prints actions).";
   ] in
   let info = Cmd.info "validate" ~doc ~man ~exits:Cmd.Exit.defaults in
-  Cmd.v info Term.(const (fun (v, custom_path, dry, max_component_len) ->
+  Cmd.v info Term.(const (fun (v, custom_path, dry, max_component_len, jobs) ->
     let cfg = load_config v custom_path in
     let verbose = v || cfg.verbose in
+    let jobs = Int.max jobs cfg.jobs in
     if verbose then begin
       Printf.printf "Validate mode\n";
       Printf.printf "  Scanning: %s\n" cfg.library_dir;
       Printf.printf "  Failed files go to: %s\n" cfg.invalid_dir;
+      Printf.printf "  Jobs: %d\n" jobs;
       if dry then Printf.printf "  [dry-run] No files will be moved\n";
       Out_channel.flush stdout;
     end;
@@ -237,30 +249,33 @@ let validate_cmd =
 
       let failures = ref 0 in
 
-      List.iter (fun path ->
-        try
-          Ocaml_books.Fb2_parse.validate path;
-          if verbose then begin
-            Printf.printf "%s → OK\n" (Filename.basename path);
-            Out_channel.flush stdout;
-          end;
-        with e ->
-          incr failures;
-          let reason = Printexc.to_string e in
-          Printf.eprintf "%s → FAILED: %s\n" (Filename.basename path) reason;
-
-          if not dry then begin
-            let dest_name = Filename.basename path in
-            let dest_path = Filename.concat cfg.invalid_dir dest_name in
-            Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
-            Sys.rename path dest_path;
-            if verbose then begin
-              Printf.printf "  → Moved %s to %s\n" path dest_path;
-              Out_channel.flush stdout;
-            end
-          end
-      ) !fb2_files;
-
+      let pool = T.setup_pool ~num_domains:jobs () in
+      ignore(T.run pool (fun () ->
+        parmap pool
+          (fun path ->
+            try
+              Ocaml_books.Fb2_parse.validate path;
+              if verbose then begin
+                Printf.printf "%s → OK\n" (Filename.basename path);
+                Out_channel.flush stdout;
+              end;
+            with e ->
+              incr failures;
+              let reason = Printexc.to_string e in
+              Printf.eprintf "%s → FAILED: %s\n" (Filename.basename path) reason;
+          
+              if not dry then begin
+                let dest_name = Filename.basename path in
+                let dest_path = Filename.concat cfg.invalid_dir dest_name in
+                Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
+                Sys.rename path dest_path;
+                if verbose then begin
+                  Printf.printf "  → Moved %s to %s\n" path dest_path;
+                  Out_channel.flush stdout;
+                end
+              end
+          ) !fb2_files
+      ));
       if !failures > 0 then
         Printf.printf "Validation complete: %d/%d files failed\n" !failures total
       else

@@ -1,5 +1,3 @@
-(* lib/unzip.ml *)
-
 (* ZIP archive extraction utilities.
    Extracts .fb2 files from ZIP archives using zipc library.
    Handles large archives via fallback to external 7z tool.
@@ -18,9 +16,8 @@ exception Zipc_error of string
     Returns [Ok content] on success or [Error msg] on failure (e.g., permission denied, file not found). *)
 let read_file_binary path =
   try
-    let ic = open_in_bin path in
-    Fun.protect ~finally:(fun () -> close_in_noerr ic)
-      (fun () -> Ok (really_input_string ic (in_channel_length ic)))
+  In_channel.with_open_bin path 
+    (fun ic -> Ok (really_input_string ic (in_channel_length ic)))
   with Sys_error msg ->
     Error msg
 

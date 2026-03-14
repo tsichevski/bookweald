@@ -4,6 +4,11 @@
  (modes byte exe)
  (preprocess (pps ppx_deriving_yojson))
  )
+(executable
+ (name fib)
+ (libraries domainslib)
+ (modes exe)
+ )
 (rule
  (alias runtest)                  ; ← dune test will run this
  (action (run ./run_tests.exe)))  ; ← runs your alcotest binary
