@@ -6,14 +6,12 @@ Configuration Management
    :depth: 2
    :local:
 
-
 Purpose
 -------
 
 The tool uses a JSON configuration file to store user-specific paths and preferences.
 
 This avoids hard-coding values and makes the tool more flexible for different users and machines.
-
 
 Configuration type
 ------------------

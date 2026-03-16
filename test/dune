@@ -9,6 +9,11 @@
  (libraries domainslib)
  (modes exe)
  )
+(executable
+ (name bancos_index)
+ (libraries ocaml_books bancos)
+ (modes exe)
+ )
 (rule
  (alias runtest)                  ; ← dune test will run this
  (action (run ./run_tests.exe)))  ; ← runs your alcotest binary

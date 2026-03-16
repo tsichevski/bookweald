@@ -14,9 +14,10 @@
    --max-component-len / -m N   max length of filename/dir components (bytes; 0 = no limit)
    --jobs / -j N           max number of domains/threads for parallel work (1 = disable)
 
-   Dependencies: cmdliner, ocaml_books (project library), Domainslib (parallelism in validate) *)
+   Dependencies: cmdliner, ocaml_books (project library), Moiu *)
 
 open Cmdliner
+open Miou
 open Ocaml_books.Config
 open Ocaml_books.Unzip
 open Ocaml_books.Book
@@ -52,7 +53,7 @@ let max_component_len =
 let jobs =
   let doc = "Maximum number of domains/threads to use for parallel work. \
              Use 1 to disable parallelism. Default → use recommended count." in
-  Arg.(value & opt int (Domain.recommended_domain_count ()) & info ["j"; "jobs"] ~docv:"N" ~doc)
+  Arg.(value & opt int (Stdlib.Domain.recommended_domain_count ()) & info ["j"; "jobs"] ~docv:"N" ~doc)
 
 (** Combination of common options passed to every command *)
 let common_opts =
@@ -230,16 +231,6 @@ let organize_cmd =
       1
   ) $ common_opts)
 
-module T = Domainslib.Task
-let parmap ?(chunk_size=10) pool f lst =
-  let arr = Array.of_list lst in
-  let len = Array.length arr in
-  let result = Array.make len (Obj.magic 0) in  (* Unsafe init; set all slots immediately below. Fine for perf-critical code. *)
-  T.parallel_for ~chunk_size ~start:0 ~finish:(len - 1) ~body:(fun i ->
-    result.(i) <- f arr.(i)
-  ) pool;
-  Array.to_list result
-
 (* ────────────────────────────────────────────── *)
 (* validate command *)
 
@@ -253,15 +244,16 @@ let validate_cmd =
     `P "Respects --dry-run (only prints actions).";
   ] in
   let info = Cmd.info "validate" ~doc ~man ~exits:Cmd.Exit.defaults in
+
   Cmd.v info Term.(const (fun (v, custom_path, dry, max_component_len, jobs) ->
     let cfg = load_config v custom_path in
     let verbose = v || cfg.verbose in
-    let jobs = Int.max jobs cfg.jobs in
+    (* jobs is kept for compatibility, but Miou ignores explicit count in most cases *)
     if verbose then begin
-      Printf.printf "Validate mode\n";
+      Printf.printf "Validate mode (using Miou concurrency)\n";
       Printf.printf " Scanning: %s\n" cfg.library_dir;
       Printf.printf " Failed files go to: %s\n" cfg.invalid_dir;
-      Printf.printf " Jobs: %d\n%!" jobs;
+      Printf.printf " Requested jobs: %d (Miou manages scheduling)\n%!" jobs;
       if dry then Printf.printf " [dry-run] No files will be moved\n%!";
     end;
 
@@ -282,49 +274,53 @@ let validate_cmd =
       let total = List.length !fb2_files in
       if verbose then begin
         Printf.printf "Found %d .fb2 files\n%!" total;
-        Out_channel.flush stdout;
       end;
 
-      let failures = ref 0 in
-      let pool = T.setup_pool ~num_domains:jobs () in
-      ignore(T.run pool (fun () ->
-        parmap pool
-          (fun path ->
-            try
-              Ocaml_books.Fb2_parse.validate path;
-              if verbose then begin
-                Printf.printf "%s → OK\n%!" (Filename.basename path);
-                Out_channel.flush stdout;
-              end;
-            with e ->
-              incr failures;
-              let reason = Printexc.to_string e in
-              Printf.eprintf "%s → FAILED: %s\n%!" (Filename.basename path) reason;
+      Miou.run ~domains:jobs @@ fun () ->
+        let failures = ref 0 in
 
-              if not dry then begin
-                let dest_name = Filename.basename path in
-                let dest_path = Filename.concat cfg.invalid_dir dest_name in
-                Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
-                Sys.rename path dest_path;
+        (* Create one lightweight fiber per file *)
+        let tasks =
+          List.map (fun path ->
+            async @@ fun k ->
+              try
+                Ocaml_books.Fb2_parse.validate path;
                 if verbose then begin
-                  Printf.printf " → Moved %s to %s\n%!" path dest_path;
-                  Out_channel.flush stdout;
-                end
-              end
+                  Printf.printf "%s → OK\n%!" (Filename.basename path);
+                end;
+                `Ok
+              with e ->
+                incr failures;
+                let reason = Printexc.to_string e in
+                Printf.eprintf "%s → FAILED: %s\n%!" (Filename.basename path) reason;
+              
+                if not dry then begin
+                  let dest_name = Filename.basename path in
+                  let dest_path = Filename.concat cfg.invalid_dir dest_name in
+                  Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
+                  Sys.rename path dest_path;
+                  if verbose then begin
+                    Printf.printf " → Moved %s to %s\n%!" path dest_path;
+                  end
+                end;
+                `Failed reason
           ) !fb2_files
-      ));
-      if !failures > 0 then
-        Printf.printf "Validation complete: %d/%d files failed\n%!" !failures total
-      else
-        Printf.printf "All %d files validated successfully\n%!" total;
+        in
 
-      0
+        (* Wait for all validations to complete *)
+        ignore (Miou.await_all tasks);
+
+        if !failures > 0 then
+          Printf.printf "Validation complete: %d/%d files failed\n%!" !failures total
+        else
+          Printf.printf "All %d files validated successfully\n%!" total;
+
+        0
 
     with e ->
-      Printf.eprintf "Validate failed: %s\n%!" (Printexc.to_string e);
+      Printf.eprintf "Validation failed: %s\n%!" (Printexc.to_string e);
       1
   ) $ common_opts)
-
 
 (* ────────────────────────────────────────────── *)
 (* Main program *)
