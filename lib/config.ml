@@ -20,6 +20,17 @@ type t = {
   verbose         : bool;               (* If true: print detailed progress info *)
   max_component_len: int;               (* Maximum length of one filename component or 0 (default) for no limit *)
   jobs: int;                            (* Number of jobs domain pool, 1 to disable parallelism *)
+  index_file      : string;             (* Path to the index file *)
+
+  (* PostgreSQL connection *)
+  db_host:string;
+  db_port:int;
+  db_user:string;
+  db_passwd:string;
+  db_name:string;
+  db_admin:string;
+  db_admin_passwd:string
+  
 } [@@deriving yojson { strict = false }]
 
 (** [default ()] returns the hardcoded default configuration values. *)
@@ -31,6 +42,16 @@ let default () : t = {
   verbose          = true;
   max_component_len = 0;
   jobs             = 1;
+  index_file       = Filename.concat (Sys.getenv "HOME") "books/index.db";
+  
+  (* PostgreSQL connection *)
+  db_host          = "localhost";
+  db_port          = 5432;
+  db_user          = "books";
+  db_passwd        = "books";
+  db_name          = "books";
+  db_admin         = "admin";
+  db_admin_passwd  = "admin"
 }
 
 (** [config_file_locations ()] returns the list of standard config file paths to check. *)
@@ -77,7 +98,7 @@ let create_default (path : string) : unit =
 
   let dir = Filename.dirname path in
   if not (Sys.file_exists dir) then begin
-      Fs.mkdir_p dir ~perm:0o755  (* assuming Fs.mkdir_p takes optional ~perm *)
+      Fs.mkdir_p dir ~perm:0o755
     end;
 
   let oc = open_out path in

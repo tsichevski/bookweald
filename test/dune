@@ -5,15 +5,44 @@
  (preprocess (pps ppx_deriving_yojson))
  )
 (executable
- (name fib)
- (libraries domainslib)
+ (name postgresql_test)
+ (libraries
+   postgresql
+ )
  (modes exe)
  )
 (executable
- (name bancos_index)
- (libraries ocaml_books bancos)
+ (name db_test)
+ (libraries
+   ocaml_books
+ )
  (modes exe)
  )
+; (executable
+;  (name fib)
+;  (libraries domainslib)
+;  (modes exe)
+;  )
+; (executable
+;  (name caqti_connect)
+;  (libraries
+;    lwt
+;    caqti
+;    caqti-lwt
+;    caqti.blocking
+;    caqti-lwt.unix)
+;  (modes exe)
+;  )
+; (executable
+;  (name bancos_index)
+;  (libraries ocaml_books bancos)
+;  (modes exe)
+;  )
+; (executable
+;  (name irmin_index)
+;  (libraries irmin)
+;  (modes exe)
+;  )
 (rule
  (alias runtest)                  ; ← dune test will run this
  (action (run ./run_tests.exe)))  ; ← runs your alcotest binary

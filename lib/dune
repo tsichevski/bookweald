@@ -1,12 +1,24 @@
 (library
  (name ocaml_books)
+ (public_name ocaml-books)
+ (synopsis "Manage FB2 archive")
  (libraries
    unix
    zipc
    xmlm
-   bancos
    yojson ppx_deriving_yojson.runtime
+
+   caqti
+   caqti-lwt
+   caqti-driver-sqlite3   ; optional – install conditionally or always
+   caqti-driver-postgresql ; optional
+   lwt
+
+   uucp uutf
+   re
+   postgresql
  )
+ ;(modules_without_implementation db)
  (preprocess (pps ppx_deriving_yojson))
  (flags :standard -g)
  )

@@ -24,10 +24,10 @@ open Book
     - Stops parsing after the closing </title-info> or </document-info> tag
 
     @param path Path to the FB2 file
-    @return [title_info] record with extracted metadata
+    @return [book] record with extracted metadata
     @raise Fb2_parse_error if required elements are missing or XML is malformed
     @raise Failure if the declared encoding is unsupported
 *)
-val parse_book_info : string -> title_info
+val parse_book_info : string -> book
 
 val validate : string -> unit
