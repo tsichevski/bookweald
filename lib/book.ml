@@ -12,10 +12,10 @@ let normalize_person (a : person) : string =
   (* String.map (function 'ё' | 'Ё' -> 'е' | c -> c) full *)
   full
 
-type book_ext_id = string (** Book application ID: either the value of <id> element or initial filename if missing *)
+type book_digest = string (** Book info digest *)
 
 type book = {
-  ext_id: book_ext_id;
+  digest: book_digest;
   title: string;         (** Book title, required *)
   authors: person list;  (** Book authors, at least one *)
   lang: string option;   (** Book language, unverified *)

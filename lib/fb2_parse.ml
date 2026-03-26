@@ -64,13 +64,19 @@ let parse_book_info path =
         let title = ref None in
         let lang = ref None in
         let genre = ref None in
-
-        let append_current_author () =
+        
+        (** If first and/or last name is collected, create a new person record, append
+            if no such person was appended earlier *)
+        let append_current_author_unique () =
           match !current_first_name, !current_middle_name, !current_last_name with
           | None, _, None ->
             current_middle_name := None;
           | first_name, middle_name, last_name ->
-            authors := { first_name; middle_name; last_name } :: !authors;
+            let current = !authors in
+            let candidate = { first_name; middle_name; last_name } in
+            if not (List.exists (fun y -> y = candidate) current) then
+              authors := candidate :: current;
+            
             current_first_name := None;
             current_middle_name := None;
             current_last_name := None;
@@ -81,7 +87,7 @@ let parse_book_info path =
           | None -> (* Element start *)
             (match path with
             | ["author"; ("title-info" | "document-info"); "description"] ->
-              append_current_author ()
+              append_current_author_unique ()
             | _ -> ());
             false
           | Some v as value->
@@ -104,7 +110,7 @@ let parse_book_info path =
             false
         ) ["description"]);
 
-        append_current_author (); (* Append the last author if any *)
+        append_current_author_unique ();
 
         let filename = (Filename.chop_extension (Filename.basename path)) in
         if List.is_empty !authors then begin
@@ -113,7 +119,7 @@ let parse_book_info path =
         end
         else
           let authors = List.rev !authors in
-          let ext_id, title =
+          let digest, title =
             match !id,!title with
             | _, None -> failwith "Book has no title"
             | None, Some title ->
@@ -123,7 +129,7 @@ let parse_book_info path =
               (id, title)
           in
           { title;
-            ext_id;
+            digest;
             authors;
             lang = !lang;
             genre = !genre;

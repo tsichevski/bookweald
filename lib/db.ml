@@ -24,11 +24,11 @@ let opt_to_string = function
 (** Try to generate book unique ID based on book info data.
     Return the digest in hex *)
 let book_compound_id (b : book) : string =
-  String.concat "|" (b.title::b.ext_id::(List.map normalize_person_key b.authors))
+  String.concat "|" (b.title::b.digest::(List.map normalize_person_key b.authors))
   |> Digest.string |> Digest.to_hex
   
 let log_book (b : book) op =
-  Log.debug (fun m -> m "%s book: ext_id=%s title=%s file=%s encoding=%s" op b.ext_id b.title b.filename b.encoding)
+  Log.debug (fun m -> m "%s book: digest=%s title=%s file=%s encoding=%s" op b.digest b.title b.filename b.encoding)
   
 let log_person ?(level = Logs.Debug) (p : person) op =
   Log.msg level (fun m -> m "%s person: %s %s %s"
@@ -40,7 +40,7 @@ let log_person ?(level = Logs.Debug) (p : person) op =
 (** Insert new book record *)
 let insert_book (c : connection) (b : book) =
   log_book b "Inserting";
-  let new_id = c#exec {|INSERT INTO books (ext_id, title, encoding, lang, genre, filename) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id|}
+  let new_id = c#exec {|INSERT INTO books (digest, title, encoding, lang, genre, filename) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id|}
     ~params:[| book_compound_id b; b.title; b.encoding; opt_to_param b.lang; opt_to_param b.genre; b.filename |]
     ~expect:[Tuples_ok]
   in
@@ -61,9 +61,34 @@ let find_person_opt (c : connection) (norm : string) =
   | 1 -> Some (existing#getvalue 0 0)
   | _ -> failwith ("More than one person with id: " ^ norm)
 
+(** [insert_person c norm a] atomically registers an author in the
+    [persons] table and returns its primary key [id].
+
+    If a person with the same [normalized_name] already exists, the
+    existing [id] is returned. Otherwise a new row is inserted.
+
+    This UPSERT pattern guarantees exactly-once semantics under
+    concurrent execution from multiple indexing threads.
+
+    @param c      PostgreSQL connection (Postgresql.connection)
+    @param norm   Unicode-normalized name used for uniqueness
+    @param a      Author record containing optional first/middle/last names
+                  (original spelling, possibly containing legacy Russian
+                  charset characters already converted to Unicode)
+
+    @return       The integer person [id] (as string, per Postgresql API)
+
+    @raise Failure if the query unexpectedly returns zero rows
+*)
 let insert_person (c : connection) norm a =
   log_person a "Inserting";
-  let new_id = c#exec {|INSERT INTO persons (first_name, middle_name, last_name, normalized_name) VALUES ($1, $2, $3, $4) RETURNING id|}
+  let new_id = c#exec {sql|
+INSERT INTO persons (first_name, middle_name, last_name, normalized_name)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (normalized_name)
+DO UPDATE SET id = persons.id   -- true no-op
+RETURNING id
+|sql}
     ~params:[| opt_to_param a.first_name; opt_to_param a.middle_name; opt_to_param a.last_name; norm |]
   in
   if new_id#ntuples = 0 then begin
@@ -86,33 +111,46 @@ let insert_link (c : connection) book_id person_id =
   ignore(c#exec {|INSERT INTO book_authors (book_id, person_id) VALUES ($1, $2)|}
     ~params:[| book_id; person_id |]
     ~expect:[Command_ok])
-
+  
+(** Delete existing book record by id+title *)
+let delete_book (c : connection) (b : book) =
+  log_book b "Deleting";
+  let new_id = c#exec {|DELETE FROM books WHERE id=$1 AND title=$2, $3, $4) RETURNING id|}
+    ~params:[| book_compound_id b; b.title; opt_to_param b.lang; opt_to_param b.genre |]
+    ~expect:[Tuples_ok]
+  in
+     if new_id#ntuples = 0 then
+       failwith "Cannot delete book"
+     else
+       new_id#getvalue 0 0
+       
 let find_or_insert_book (c : connection) (b : book) : book_id =
   let title = b.title in
   let authors = b.authors in
-  let ext_id = book_compound_id b in
+  let digest = book_compound_id b in
   let filename = b.filename in
   (* Existing books with given book id and title *)
   log_book b "Looking for existing";
   let existing_book = c#exec
-    "SELECT books.id FROM books, book_authors, persons WHERE books.ext_id = $1 AND book_authors.book_id=books.id AND book_authors.person_id=person.id"
-    ~params:[| ext_id |] in
+    "SELECT books.id FROM books, book_authors, persons WHERE books.digest = $1 AND book_authors.book_id=books.id AND book_authors.person_id=person.id"
+    ~params:[| digest |] in
   let new_book_id, persons_to_add =
     match existing_book#ntuples with
     | 0 ->
       log_book b "Will insert";
       let book_id = insert_book c b in
-      Log.debug (fun m -> m "Created new book: ext_id=%s, title=%s new id=%s, file=%s" ext_id title book_id filename);
+      Log.debug (fun m -> m "Created new book: digest=%s, title=%s new id=%s, file=%s" digest title book_id filename);
       (book_id, authors)
     | 1 ->
+      log_book b "Existing";
       (* collect missing persons, add missing links *)
       let book_id = existing_book#getvalue 0 0 in
       (* Get book authors *)
       let existing = c#exec
         "SELECT person.normalized_name FROM books, book_authors, persons WHERE books.id = $1 AND book_authors.person_id=persons.id AND book_authors.book_id=books.id"
-        ~params:[| ext_id |] in
+        ~params:[| digest |] in
       let ntuples = existing#ntuples in
-      Log.debug (fun m -> m "Will update existing book: ext_id=%s, title=%s, id=%s, %d authors" ext_id title book_id ntuples);
+      Log.debug (fun m -> m "Will update existing book: digest=%s, title=%s, id=%s, %d authors" digest title book_id ntuples);
       
       (* Collect existing normalized person names *)
       let rec collect accu i =
@@ -129,61 +167,6 @@ let find_or_insert_book (c : connection) (b : book) : book_id =
     | n ->
       Log.warn (fun m -> m "More than one book (%d) with same id and title found" n);
       failwith "Multiple books with same id and title found"
-  in
-  let person_ids_to_add = List.map (fun a -> find_or_insert_person c a) persons_to_add in
-  ignore(List.iter (fun person_id -> insert_link c new_book_id person_id) person_ids_to_add);
-  new_book_id
-  
-(** Delete existing book record by id+title *)
-let delete_book (c : connection) (b : book) =
-  log_book b "Deleting";
-  let new_id = c#exec {|DELETE FROM books WHERE id=$1 AND title=$2, $3, $4) RETURNING id|}
-    ~params:[| book_compound_id b; b.title; opt_to_param b.lang; opt_to_param b.genre |]
-    ~expect:[Tuples_ok]
-  in
-     if new_id#ntuples = 0 then
-       failwith "Cannot delete book"
-     else
-       new_id#getvalue 0 0
-       
-let find_or_insert_book (c : connection) (b : book) =
-  let authors = b.authors in
-  let ext_id = book_compound_id b in
-  (* Existing books with given book id and title *)
-  log_book b "Looking for existing";
-  let existing = c#exec
-    "SELECT books.id FROM books, book_authors, persons WHERE books.ext_id = $1 AND book_authors.book_id=books.id AND book_authors.person_id=person.id"
-    ~params:[| ext_id |] in
-  let new_book_id, persons_to_add =
-    match existing#ntuples with
-    | 0 ->
-      log_book b "Is new";
-      (* Book is new, insert the book, return new book id and all book authors *)
-      let book_id = insert_book c b in
-      (book_id, authors)
-    | 1 ->
-      log_book b "Existing";
-      (* collect missing persons, add missing links *)
-      let book_id = existing#getvalue 0 0 in
-      (* Get book authors *)
-      let existing = c#exec
-        "SELECT person.normalized_name FROM books, book_authors, persons WHERE books.id = $1 AND book_authors.person_id=persons.id AND book_authors.book_id=books.id"
-        ~params:[| ext_id |] in
-      let ntuples = existing#ntuples in
-      
-      (* Collect existing normalized person names *)
-      let rec collect accu i =
-        if i = ntuples then
-          accu
-        else
-          let existing_norm = existing#getvalue i 0 in
-          collect (existing_norm::accu) (i + 1) in
-      let existing_norms = collect [] 0 in
-      
-      (* Collect missing persons *)
-      (book_id, List.filter (fun a -> List.exists (fun n -> not ((normalize_person_key a) = n)) existing_norms) authors)
-      
-    | _ -> failwith "More than one book with same id and title found"
   in
   let person_ids_to_add = List.map (fun a -> find_or_insert_person c a) persons_to_add in
   ignore(List.iter (fun person_id -> insert_link c new_book_id person_id) person_ids_to_add);
@@ -220,7 +203,7 @@ let init_schema (c : connection) =
   let queries = [
     {sql| CREATE TABLE IF NOT EXISTS books (
             id SERIAL PRIMARY KEY,
-            ext_id TEXT UNIQUE NOT NULL,
+            digest TEXT UNIQUE NOT NULL,
             title TEXT,
             encoding TEXT,
             lang TEXT,
