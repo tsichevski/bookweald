@@ -113,29 +113,24 @@ let parse_book_info path =
         append_current_author_unique ();
 
         let filename = (Filename.chop_extension (Filename.basename path)) in
-        if List.is_empty !authors then begin
-          Log.warn (fun m -> m "Book %s has no authors" filename);
-          failwith "Book has no authors"
-        end
-        else
-          let authors = List.rev !authors in
-          let digest, title =
-            match !id,!title with
-            | _, None -> failwith "Book has no title"
-            | None, Some title ->
-              Log.warn (fun m -> m "Book %s has no ID, will try filename instead" filename);
-              (filename, title)
-            | Some id, Some title ->
-              (id, title)
-          in
-          { title;
-            digest;
-            authors;
-            lang = !lang;
-            genre = !genre;
-            encoding;
-            filename;
-          }
+        let digest, title =
+          match !id,!title with
+          | _, None -> failwith "Book has no title"
+          | None, Some title ->
+            Log.warn (fun m -> m "Book %s has no ID, will try filename instead" filename);
+            (filename, title)
+          | Some id, Some title ->
+            (id, title)
+        in
+        let authors = List.rev !authors in
+        { title;
+          digest;
+          authors;
+          lang = !lang;
+          genre = !genre;
+          encoding;
+          filename;
+        }
       else
         raise (Fb2_parse_error (Printf.sprintf "%s: no 'description' XML element found" path))
     )
