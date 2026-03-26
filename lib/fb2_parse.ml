@@ -3,6 +3,8 @@ open Book
 
 exception Fb2_parse_error of string
 
+module Log = (val Logs.src_log (Logs.Src.create "ocaml-books" ~doc:"Tool commands") : Logs.LOG)
+
 let rec parse input handle path =
   let signal = Xmlm.input input in
   match signal with
@@ -104,21 +106,30 @@ let parse_book_info path =
 
         append_current_author (); (* Append the last author if any *)
 
-        if List.is_empty !authors then
+        let filename = (Filename.chop_extension (Filename.basename path)) in
+        if List.is_empty !authors then begin
+          Log.warn (fun m -> m "Book %s has no authors" filename);
           failwith "Book has no authors"
+        end
         else
-          match !id,!title with
-          | _, None -> failwith "Book has no title"
-          | None, _ -> failwith "Book has no ID"
-          | Some id, Some title ->         
-            { title;
-              id;
-              authors = List.rev !authors;
-              lang = !lang;
-              genre = !genre;
-              encoding;
-              filename = (Filename.basename path);
-            }
+          let authors = List.rev !authors in
+          let ext_id, title =
+            match !id,!title with
+            | _, None -> failwith "Book has no title"
+            | None, Some title ->
+              Log.warn (fun m -> m "Book %s has no ID, will try filename instead" filename);
+              (filename, title)
+            | Some id, Some title ->
+              (id, title)
+          in
+          { title;
+            ext_id;
+            authors;
+            lang = !lang;
+            genre = !genre;
+            encoding;
+            filename;
+          }
       else
         raise (Fb2_parse_error (Printf.sprintf "%s: no 'description' XML element found" path))
     )

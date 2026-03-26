@@ -21,9 +21,13 @@ type t = {
   max_component_len: int;               (* Maximum length of one filename component or 0 (default) for no limit *)
   jobs: int;                            (* Number of jobs domain pool, 1 to disable parallelism *)
   index_file      : string;             (* Path to the index file *)
+  log_file        : string option;      (* Path to the log file or None to log to stdout *)
+  log_level       : string option;      (* Logging level or None for default INFO or
+                                           Some ("quiet"|"app"|"error"|"warning"|"info"| "debug") *)
 
   (* PostgreSQL connection *)
-  db_host:string;
+  
+  db_host:string;                       (* Connection hostname *)
   db_port:int;
   db_user:string;
   db_passwd:string;
@@ -43,6 +47,8 @@ let default () : t = {
   max_component_len = 0;
   jobs             = 1;
   index_file       = Filename.concat (Sys.getenv "HOME") "books/index.db";
+  log_file         = None;  
+  log_level        = None;
   
   (* PostgreSQL connection *)
   db_host          = "localhost";
@@ -54,35 +60,15 @@ let default () : t = {
   db_admin_passwd  = "admin"
 }
 
-(** [config_file_locations ()] returns the list of standard config file paths to check. *)
-let config_file_locations () : string list =
-  [
-    "config.json";
-    Filename.concat (Sys.getenv "HOME") ".config/ocaml-books/config.json";
-  ]
-
-(** [load ()] attempts to load configuration from standard locations.
-    Prints errors to stderr on failure (invalid JSON, read errors) and continues to next location.
-    Returns default configuration if all locations fail or no files exist. *)
-let load () : t =
-  let rec try_load = function
-    | [] -> default ()
-    | path :: rest ->
-       if Sys.file_exists path then
-         try
-           let json = Yojson.Safe.from_file path in
-           match of_yojson json with
-           | Ok cfg -> cfg
-           | Error e ->
-              Printf.eprintf "Invalid config %s: %s\n" path e;
-              try_load rest
-         with e ->
-           Printf.eprintf "Cannot read config %s: %s\n" path (Printexc.to_string e);
-           try_load rest
-       else
-         try_load rest
-  in
-  try_load (config_file_locations ())
+let load path : t =
+  try
+    match of_yojson (Yojson.Safe.from_file path) with
+    | Ok cfg -> cfg
+    | Error e ->
+      failwith (Printf.sprintf "Invalid config %s: %s" path e)
+  with e ->
+    Printf.eprintf "Cannot read config %s: %s\n" path (Printexc.to_string e);
+    raise e
 
 (** [create_default path] writes a default configuration to [path] in pretty-printed JSON.
     Creates parent directories if needed using Fs.mkdir_p.

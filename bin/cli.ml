@@ -1,93 +1,43 @@
 (* Command-line interface for the OCaml Books tool.
-   Uses Cmdliner (2.1.0) for subcommands, flags, automatic help/man-page generation.
+Uses Cmdliner (2.1.0) for subcommands, flags, automatic help/man-page generation.
 
-   Supported subcommands:
-   - init       create default configuration file
-   - import     extract FB2 files from ZIP archive(s)
-   - organize   parse FB2 files and move them into author-named subdirectories
-   - validate   fully parse all FB2 files and move invalid ones to invalid_dir
-   - index      add files to index
+Supported subcommands:
+- init       create default configuration file
+- extract    extract FB2 files from ZIP archive(s)
+- group      parse FB2 files and move them into author-named subdirectories
+- validate   fully parse all FB2 files as XML and move invalid ones to invalid_dir
+- index      add files to index
 
-   Common flags:
-   --verbose / -v          increase verbosity
-   --config / -c FILE      custom config file
-   --dry-run               simulate actions (no file changes)
-   --max-component-len / -m N   max length of filename/dir components (bytes; 0 = no limit)
-   --jobs / -j N           max number of domains/threads for parallel work (1 = disable)
+Common flags:
+--config / -c FILE      custom config file
+--dry-run               simulate actions (no file changes)
+--max-component-len / -m N   max length of filename/dir components (bytes; 0 = no limit)
+--jobs / -j N           max number of domains/threads for parallel work (1 = disable)
 
-   Dependencies: cmdliner, ocaml_books (project library), Moiu *)
-
+Dependencies: cmdliner, ocaml_books (project library), Moiu *)
 open Cmdliner
-open Printf
-open Miou
-open Ocaml_books.Config
-open Ocaml_books.Unzip
-open Ocaml_books.Book
-open Ocaml_books.Fs
-
 module Db = Ocaml_books.Db
 open Db
 
-(* ────────────────────────────────────────────── *)
-(* Common options ───────────────────────────────── *)
+module Log = (val Logs.src_log (Logs.Src.create "ocaml-books" ~doc:"Tool commands") : Logs.LOG)
 
-(** Flag to increase verbosity (show more progress and debug messages) *)
-let verbose =
-  let doc = "Increase verbosity (show more details during operations)" in
-  Arg.(value & flag & info ["v"; "verbose"] ~doc)
-
-(** Optional path to custom configuration file *)
-let config_opt =
-  let doc = "Path to configuration file (default: ~/.config/ocaml-books/config.json)" in
-  Arg.(value & opt (some string) None & info ["c"; "config"] ~docv:"FILE" ~doc)
-
-(** Flag to simulate actions without modifying the file system *)
-let dry_run =
-  let doc = "Do not perform any real file operations (simulation mode)" in
-  Arg.(value & flag & info ["dry-run"] ~doc)
-
-(** Maximum allowed byte length of any single filename or directory component.
-    0 = no artificial limit (use OS/filesystem limit) *)
-let max_component_len =
-  let doc = "Maximum allowed length of any filename or directory component (in bytes). \
-             0 = no limit (default: no limit)." in
-  Arg.(value & opt int 0 & info ["m"; "max-component-len"] ~docv:"N" ~doc)
-
-(** Maximum number of domains (threads) to use for parallel operations.
-    Default: recommended count from Domain.recommended_domain_count () *)
-let jobs =
-  let doc = "Maximum number of domains/threads to use for parallel work. \
-             Use 1 to disable parallelism. Default → use recommended count." in
-  Arg.(value & opt int (Stdlib.Domain.recommended_domain_count ()) & info ["j"; "jobs"] ~docv:"N" ~doc)
-
-let source_dir =
-  let doc = "Path to the source directory, default is configured library_dir" in
-  Arg.(value & opt (some string) None & info ["path"] ~docv:"PATH" ~doc)
-
-let index_file =
-  let doc = "Path to the index file" in
-  Arg.(value & opt (some string) None & info ["index-file"] ~docv:"INDEX" ~doc)
-
-(** Combination of common options passed to every command *)
-let common_opts =
-  Term.(const (fun v c d m j -> (v, c, d, m, j))
-        $ verbose $ config_opt $ dry_run $ max_component_len $ jobs)
+(** Global config file term *)
+let config_term : string option Term.t =
+  let doc = "Path to the configuration file. \
+  If omitted, defaults to ~/.config/ocaml-books/config.json." in
+  Arg.(value & opt (some string) None &
+       info ["c"; "config"] ~docv:"FILE" ~doc)
 
 
-(* ────────────────────────────────────────────── *)
-(* Helper: load config with fallback & verbose log *)
-
-let load_config verbose custom_path =
-  match custom_path with
-  | Some p when not (Sys.file_exists p) ->
-      if verbose then eprintf "Custom config %s not found, using defaults\n%!" p;
-      Ocaml_books.Config.default ()
-  | Some p ->
-      if verbose then printf "Loading config from: %s\n%!" p;
-      Ocaml_books.Config.load () (* TODO: add ~path support later if needed *)
-  | None ->
-      if verbose then printf "Loading config from default locations\n%!";
-      Ocaml_books.Config.load ()
+(** Helper to create a full Cmd.t with global config *)
+let make_cmd name doc man action_term =
+  let info = Cmd.info name ~doc ~man in
+  let full_term =
+    Term.(const (fun config action -> (config, action))
+          $ config_term
+          $ action_term)
+  in
+  Cmd.v info full_term
 
 let parallel_execute jobs action on_failure files =
   Miou.run ~domains:jobs
@@ -95,7 +45,7 @@ let parallel_execute jobs action on_failure files =
       let tasks =
         List.map
           (fun path ->
-            call
+            Miou.call
               (fun () ->
                 try
                   action path
@@ -105,9 +55,11 @@ let parallel_execute jobs action on_failure files =
           )
           files
       in
-      (* Wait for all validations to complete *)
-      await_all tasks)
-        
+
+      Miou.await_all tasks)
+
+(** Recursively find all regular files with .fb2 extension in a directory
+This function is used in several commands. *)
 let find_fb2_files dir =
   let rec aux d accu =
     if Ocaml_books.Fs.is_regular_file d then
@@ -128,14 +80,35 @@ let find_fb2_files dir =
         
   aux dir []
 
-let connect cfg as_admin =
+let connect (cfg : Ocaml_books.Config.t) as_admin =
   let user,password = if as_admin then (cfg.db_admin, cfg.db_admin_passwd) else (cfg.db_user, cfg.db_passwd) in
   Db.connect ~host:cfg.db_host ~user:user ~password:password ~port:cfg.db_port ~dbname:cfg.db_name ()
 
-(* let () = List.iter print_endline (find_fb2_files "/media/vvt/576c72be-126f-4850-8fc6-20df6eac8965/books") *)
+let dry_run =
+  let doc = "Do not actually write anything, just show what would happen." in
+  Arg.(value & flag & info ["n"; "dry-run"] ~doc)
 
-(* ────────────────────────────────────────────── *)
-(* init command *)
+let source_dir =
+  let doc = "Path to the source directory, default is configured library_dir" in
+  Arg.(value & opt (some string) None & info ["path"] ~docv:"PATH" ~doc)
+
+let overwrite =
+  let doc = "Overwrite existing files without asking." in
+  Arg.(value & flag & info ["f"; "force"] ~doc)
+
+(** Maximum allowed byte length of any single filename or directory component.
+0 = no artificial limit (use OS/filesystem limit) *)
+let max_component_len =
+  let doc = "Maximum allowed length of any filename or directory component (in bytes). \
+  0 = no limit (default: no limit)." in
+  Arg.(value & opt int 0 & info ["m"; "max-component-len"] ~docv:"N" ~doc)
+
+(** Maximum number of domains (threads) to use for parallel operations.
+Default: recommended count from Domain.recommended_domain_count () *)
+let jobs =
+  let doc = "Maximum number of domains/threads to use for parallel work. \
+  Use 1 to disable parallelism. Default → use recommended count." in
+  Arg.(value & opt int (Stdlib.Domain.recommended_domain_count ()) & info ["j"; "jobs"] ~docv:"N" ~doc)
 
 (** Command "init" — creates default configuration file *)
 let init_cmd =
@@ -144,140 +117,59 @@ let init_cmd =
     `S Manpage.s_description;
     `P "Creates ~/.config/ocaml-books/config.json with default values."
   ] in
-  Cmd.v (Cmd.info "init" ~doc ~man) Term.(const (fun (v, c, d, m, j) ->
-    if d then begin
-      printf "[dry-run] Would create default config\n%!";
-      0
-    end else
-      let cfg = load_config v c in
-      let verbose = v || cfg.verbose in
-      let path = Filename.concat (Sys.getenv "HOME") ".config/ocaml-books/config.json" in
-      try
-        Ocaml_books.Config.create_default path;
-        if verbose then printf "Created config: %s\n%!" path;
-        0
-      with e ->
-        eprintf "Failed to create config: %s\n%!" (Printexc.to_string e);
-        1
-  ) $ common_opts)
+  (* Combine them into one action term *)
+  let action_term =
+    Term.(const (fun dry -> `Init dry) $ dry_run)
+  in
+  make_cmd "init" doc man action_term
 
+(** Command "schema-init" - (re)initializes DB schema *)
+let schema_init_cmd =
+  let doc = "Drop DB contents and initialize DB schema" in
+  let man = [
+    `S Manpage.s_description;
+    `P "Initializes DB schema.";
+  ] in
+  let action_term =
+    Term.(const (fun dry -> `SchemaInit dry) $ dry_run)
+  in
+  make_cmd "schema-init" doc man action_term
 
-(* ────────────────────────────────────────────── *)
-(* import command *)
-
-(** Positional argument for import: path to ZIP file or directory *)
-let zip_path_arg =
-  let doc = "Path to ZIP file or directory containing ZIP archives" in
-  Arg.(required & pos 0 (some string) None & info [] ~docv:"PATH" ~doc)
-
-(** Command "import" — extracts FB2 files from ZIP archive(s) *)
-let import_cmd =
-  let doc = "Extract FB2 files from ZIP archive(s)" in
+(** Extract command *)
+let extract_cmd =
+  let doc = "Extract from a ZIP archive containing FB2 books." in
   let man = [
     `S Manpage.s_description;
     `P "Extracts all .fb2 files from given ZIP."
   ] in
-  Cmd.v (Cmd.info "import" ~doc ~man) Term.(const (fun (v, c, d, m, j) path ->
-    let cfg = load_config v c in
-    let verbose = v || cfg.verbose in
+  let zip_file = Arg.(required & pos 0 (some string) None & info [] ~docv:"ZIPFILE") in
 
-    if d then begin
-      printf "[dry-run] Would extract from %s to %s\n%!" path cfg.library_dir;
-      0
-    end else
-      match Ocaml_books.Unzip.extract_fb2_files path cfg.library_dir with
-      | Ok extracted ->
-         if verbose then
-           printf "Extracted %d FB2 files\n%!" (List.length extracted);
-         0
-      | Error msg ->
-         eprintf "Extraction failed: %s\n%!" msg;
-         1
-  ) $ common_opts $ zip_path_arg)
+  (* Combine them into one action term *)
+  let action_term =
+    Term.(const (fun zip dry overwrite -> `Extract (zip, dry, overwrite))
+          $ zip_file
+          $ dry_run
+          $ overwrite)
+  in
+  make_cmd "extract" doc man action_term
 
-
-(* ────────────────────────────────────────────── *)
-(* organize command *)
-
-(** Command "organize" — parses and moves FB2 files into author-named subdirectories *)
-let organize_cmd =
-  let doc = "Parse FB2 files and move them into author-named subdirectories" in
+let group_cmd =
+  let doc = "Group books by author (create author sub-directories)." in
   let man = [
     `S Manpage.s_description;
-    `P "Scans library_dir for FB2 files,";
+    `P "Scans directory for FB2 files,";
     `P "parses author/title, and moves files to target_dir/author_name/.";
     `P "Uses sanitized filenames: author - title.fb2";
   ] in
-  Cmd.v (Cmd.info "organize" ~doc ~man) Term.(const (fun (v, custom_path, dry, max_component_len, jobs) source_dir ->
-    let cfg = load_config v custom_path in
-    let verbose = v || cfg.verbose in
-    let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
-    let max_component_len = if max_component_len = 0 then cfg.max_component_len else max_component_len in
-    printf "Source %s\n%!" source_dir;
-    if verbose then begin
-      printf "Organize mode (max component length = %d bytes)\n%!" max_component_len;
-      printf " Source: %s\n" source_dir;
-      printf " Target: %s\n%!" cfg.target_dir;
-      if dry then printf " [dry-run] No files will be moved\n%!";
-    end;
-
-    let fb2_files = find_fb2_files source_dir in
-    let total = List.length fb2_files in
-    if verbose then
-      printf "Found %d candidate FB2 files\n%!" total;
-
-    let failures = ref 0 in
-    ignore(parallel_execute jobs
-      (fun path ->
-        (* if verbose then printf "Parsing: %s\n%!" path; *)
-        let book = Ocaml_books.Fb2_parse.parse_book_info path in
-        let author =
-          match book.authors with
-          | [] -> "UnknownAuthor"
-          | { first_name; middle_name; last_name; _} :: _ ->
-            match List.filter_map Fun.id [first_name; middle_name; last_name] with
-            | [] -> "UnknownAuthor"
-            | parts -> String.concat " " parts
-        in
-        let title = book.title in
-        let author_dir = Filename.concat cfg.target_dir (Ocaml_books.Fs.sanitize_filename author max_component_len) in
-        let dest_name = sprintf "%s.fb2" (Ocaml_books.Fs.sanitize_filename title max_component_len) in
-        let dest_path = Filename.concat author_dir dest_name in
-
-        if not (path = dest_path) then
-          if dry then
-            printf "[dry-run] Would move %s → %s\n%!" path dest_path
-          else begin
-            if verbose then printf "Moving %s → %s\n%!" path dest_path;
-            Ocaml_books.Fs.mkdir_p author_dir;
-            Sys.rename path dest_path
-          end;
-      )
-      (fun e path ->
-        incr failures;
-        let reason = Printexc.to_string e in
-        eprintf "%s → FAILED: %s\n%!" (Filename.basename path) reason;
-        
-        if not dry then begin
-          let dest_name = Filename.basename path in
-          let dest_path = Filename.concat cfg.invalid_dir dest_name in
-          Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
-          Sys.rename path dest_path;
-          if verbose then
-            printf " → Moved %s to %s\n%!" path dest_path;
-        end;
-      )
-      fb2_files);
-
-    if !failures > 0 then
-      printf "Organization complete: %d/%d files failed\n%!" !failures total
-    else
-      printf "All %d files organized successfully\n%!" total;
-    0
-  ) $ common_opts $ source_dir)
-
-(* ────────────────────────────────────────────── *)
-(* validate command *)
+  let action_term =
+    Term.(const (fun source_dir dry overwrite max_component_len jobs -> `Group (source_dir, dry, overwrite, max_component_len, jobs))
+          $ source_dir
+          $ dry_run
+          $ overwrite
+          $ max_component_len
+          $ jobs)
+  in
+  make_cmd "group" doc man action_term
 
 (** Command "validate" — fully parses all FB2 files and moves invalid ones to invalid_dir *)
 let validate_cmd =
@@ -288,59 +180,14 @@ let validate_cmd =
     `P "Files that fail validation are moved to configured invalid_dir.";
     `P "Respects --dry-run (only prints actions).";
   ] in
-  let info = Cmd.info "validate" ~doc ~man in
-
-  Cmd.v info Term.(const (fun (v, custom_path, dry, max_component_len, jobs) source_dir ->
-    let cfg = load_config v custom_path in
-    let verbose = v || cfg.verbose in
-    let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
-    if verbose then begin
-      printf "Validate mode (using Miou concurrency)\n";
-      printf " Scanning: %s\n" source_dir;
-      printf " Failed files go to: %s\n" cfg.invalid_dir;
-      printf " Requested jobs: %d (Miou manages scheduling)\n%!" jobs;
-      if dry then printf " [dry-run] No files will be moved\n%!";
-    end;
-
-    let fb2_files = find_fb2_files source_dir in
-    
-    let total = List.length fb2_files in
-    if verbose then begin
-      printf "Found %d .fb2 files\n%!" total;
-    end;
-    
-    let failures = ref 0 in
-    ignore(parallel_execute jobs
-      (fun path ->
-        Ocaml_books.Fb2_parse.validate path;
-        if verbose then
-          printf "%s → OK\n%!" (Filename.basename path);
-      )
-      (fun e path ->
-        incr failures;
-        let reason = Printexc.to_string e in
-        eprintf "%s → FAILED: %s\n%!" (Filename.basename path) reason;
-        
-        if not dry then begin
-          let dest_name = Filename.basename path in
-          let dest_path = Filename.concat cfg.invalid_dir dest_name in
-          Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
-          Sys.rename path dest_path;
-          if verbose then
-            printf " → Moved %s to %s\n%!" path dest_path;
-        end;
-      )
-      fb2_files);
-      
-    if !failures > 0 then
-      printf "Validation complete: %d/%d files failed\n%!" !failures total
-    else
-      printf "All %d files validated successfully\n%!" total;
-    0
-  ) $ common_opts $ source_dir)
-
-(* ────────────────────────────────────────────── *)
-(* index command *)
+  let action_term =
+    Term.(const (fun source_dir dry overwrite jobs -> `Validate (source_dir, dry, overwrite, jobs))
+          $ source_dir
+          $ dry_run
+          $ overwrite
+          $ jobs)
+  in
+  make_cmd "validate" doc man action_term
 
 (** Command "index" — parses all FB2 files and updates index *)
 let index_cmd =
@@ -348,117 +195,278 @@ let index_cmd =
   let man = [
     `S Manpage.s_description;
     `P "Index each .fb2 file.";
-    `P "Respects --dry-run (only prints actions).";
+    `P "Respects --dry-run (only logs actions).";
   ] in
-  let info = Cmd.info "index" ~doc ~man in
-
-  Cmd.v info Term.(const (fun (v, custom_path, dry, max_component_len, jobs) source_dir index_file ->
-    let cfg = load_config v custom_path in
-    let verbose = v || cfg.verbose in
-    let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
-    let index_file = match index_file with Some p -> p | None -> cfg.index_file in
-    if verbose then begin
-      printf "Index mode\n";
-      printf " Scanning: %s\n" source_dir;
-      printf " Index file: %s\n" index_file;
-      printf " Requested jobs: %d\n%!" jobs;
-      if dry then printf " [dry-run] No files will be indexed\n%!";
-    end;
-
-    let fb2_files = find_fb2_files source_dir in
-    
-    let total = List.length fb2_files in
-    if verbose then begin
-      printf "Found %d .fb2 files\n%!" total;
-    end;
-    
-    let failures = ref 0 in
-    let c = connect cfg false in
-    let result = parallel_execute jobs
-      (fun path ->
-        let book = Ocaml_books.Fb2_parse.parse_book_info path in
-        let id = Db.find_or_insert_book c book in
-        if verbose then
-          printf "%s → OK\n%!" (Filename.basename path);
-        id
-      )
-      (fun e path ->
-        incr failures;
-        let reason =
-          match e with
-          | Postgresql.Error pe -> Postgresql.string_of_error pe
-          | _ -> Printexc.to_string e in
-
-        eprintf "%s → FAILED: %s\n%!" (Filename.basename path) reason;
-        raise e
-      )
-      fb2_files
-    in
-    List.iter (function
-      | Ok id -> printf "Ok: %s\n%!" id
-      | Error _ -> printf "Error\n%!")
-      result
-      ;
-    if !failures > 0 then
-      printf "Indexing complete: %d/%d files failed\n%!" !failures total
-    else
-      printf "All %d files indexed successfully\n%!" total;
-    0
-  ) $ common_opts $ source_dir $ index_file)
-
-(* ────────────────────────────────────────────── *)
-(* schema-init command *)
-
-(** Command "schema-init" - (re)initializes DB schema *)
-let schema_init_cmd =
-  let doc = "Drop DB contents and initialize DB schema" in
-  let man = [
-    `S Manpage.s_description;
-    `P "Initializes DB schema.";
-  ] in
-  let info = Cmd.info "schema-init" ~doc ~man in
-
-  Cmd.v info Term.(const (fun (v, custom_path, dry, max_component_len, jobs) ->
-    let cfg = load_config v custom_path in
-    let verbose = v || cfg.verbose in
-    if verbose then begin
-      printf "Initialize DB schema\n";
-    end;
-
-    let admconn = connect cfg true in
-    Db.drop_schema admconn;
-    Db.init_schema admconn;
-    Db.close admconn;
-
-    0
-  ) $ common_opts)
-
-(* ────────────────────────────────────────────── *)
-(* Main program *)
-
-(** Entry point of the CLI application.
-    Builds the command group and evaluates it using Cmdliner. *)
-let main () =
-  let doc = "Tool for managing and organizing personal FB2 book collection" in
-  let sdocs = Manpage.s_common_options in
-  let man = [
-    `S Manpage.s_description;
-    `P "Extracts, parses and organizes FB2 books from ZIP archives by author.";
-    `S Manpage.s_examples;
-    `P "ocaml-books init";
-    `P "ocaml-books import library.zip --verbose --dry-run";
-    `P "ocaml-books organize";
-    `P "ocaml-books validate";
-    `P "ocaml-books index";
-  ] in
-  let main_info =
-    Cmd.info "ocaml-books"
-      ~version:"0.1.0"
-      ~doc
-      ~sdocs
-      ~man
+  let action_term =
+    Term.(const (fun source_dir dry overwrite jobs -> `Index (source_dir, dry, overwrite, jobs))
+          $ source_dir
+          $ dry_run
+          $ overwrite
+          $ jobs)
   in
-  let cmd = Cmd.group main_info @@ [init_cmd; import_cmd; organize_cmd; validate_cmd; index_cmd; schema_init_cmd; ] in
-  Cmd.eval' cmd
+  make_cmd "index" doc man action_term
 
-let () = if !Sys.interactive then () else exit (main ())
+
+
+(** Main entry point *)
+let main () =
+  let lock = Mutex.create () in
+  let lock () = Mutex.lock lock and unlock () = Mutex.unlock lock in
+  Logs.set_reporter_mutex ~lock ~unlock;
+  
+  let info =
+    Cmd.info "books"
+      ~version:"0.1.0"
+      ~doc:"Home Book Library manager written in OCaml"
+      ~man:[
+        `S Manpage.s_common_options;
+        `P "The only common option is --config / -c.";
+      ]
+  in
+
+  (* Default term when no sub-command is given *)
+  let default_term =
+    Term.(const (fun config -> (config, `Help)) $ config_term)
+  in
+
+  let subcommands = [
+    init_cmd;
+    schema_init_cmd;
+    extract_cmd;
+    group_cmd;
+    index_cmd;
+  ] in
+
+  let tool = Cmd.group ~default:default_term info subcommands in
+
+  match Cmd.eval_value tool with
+  | Ok (`Ok (config_file, action)) ->
+    (* Global setup *)
+    let config_path = match config_file with
+    | Some p -> p
+    | None ->
+      let home = Sys.getenv "HOME" in
+      Filename.concat (Filename.concat home ".config") "ocaml-books/config.json"
+    in    
+    Log.debug (fun m -> m "Loading configuration from %s" config_path);
+    let cfg =
+      if Sys.file_exists config_path then
+        Ocaml_books.Config.load config_path
+      else
+        Ocaml_books.Config.default () in
+        
+    ignore(match cfg.log_file with
+    | None -> Logs.set_reporter (Logs.format_reporter ())
+    | Some file -> Ocaml_books.Logging.setup_logs file);
+
+    Logs.set_level (match cfg.log_level with
+    | None -> (Some Logs.Info)
+    | Some name -> 
+      match Logs.level_of_string name with
+      | Ok l -> l
+      | Error (`Msg msg) -> failwith msg);
+
+    (* Dispatch action *)
+    begin
+      match action with
+      | `Extract (zip, dry_run, overwrite) ->
+        if dry_run then
+          Log.info (fun m -> m "[dry-run] Would extract from %s to %s" zip cfg.library_dir)
+        else begin
+          Log.info (fun m -> m "Extract %s (dry-run=%b, overwrite=%b)" zip dry_run overwrite);
+          match Ocaml_books.Unzip.extract_fb2_files ~overwrite zip cfg.library_dir with
+          | Ok extracted ->
+            Log.info (fun m -> m "Extracted %d FB2 files" (List.length extracted));
+            exit 0
+          | Error msg ->
+            Log.err (fun m -> m "Extraction failed: %s" msg);
+            exit 1
+        end
+      
+      | `Init dry_run ->
+        begin
+          if dry_run then begin
+            Log.info (fun m -> m "[dry-run] Would create default config");
+            exit 0
+          end else
+            let path = Filename.concat (Sys.getenv "HOME") ".config/ocaml-books/config.json" in
+            try
+              Ocaml_books.Config.create_default path;
+              Log.info (fun m -> m "Created config: %s" path);
+              exit 0
+            with e ->
+              Log.err (fun m -> m "Failed to create config: %s" (Printexc.to_string e));
+              exit 1
+        end
+        
+      | `Group (source_dir, dry_run, overwrite, max_component_len, jobs)
+        ->
+        let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
+        let max_component_len = if max_component_len = 0 then cfg.max_component_len else max_component_len in
+        Log.info (fun m -> m "Grouping books by author ...\nSource %s\nOrganize mode (max component length = %d bytes)\n Source: %s\n Target: %s"
+          source_dir
+          max_component_len
+          source_dir
+          cfg.target_dir);
+        if dry_run then Log.info (fun m -> m " [dry-run] No files will be moved");
+
+        let fb2_files = find_fb2_files source_dir in
+        let total = List.length fb2_files in
+        Log.info (fun m -> m "Found %d candidate FB2 files" total);
+
+        let failures = ref 0 in
+        ignore(parallel_execute jobs
+          (fun path ->
+            let book = Ocaml_books.Fb2_parse.parse_book_info path in
+            let author =
+              match book.authors with
+              | [] -> "UnknownAuthor"
+              | { first_name; middle_name; last_name; _} :: _ ->
+                match List.filter_map Fun.id [first_name; middle_name; last_name] with
+                | [] -> "UnknownAuthor"
+                | parts -> String.concat " " parts
+            in
+            let title = book.title in
+            let author_dir = Filename.concat cfg.target_dir (Ocaml_books.Fs.sanitize_filename author max_component_len) in
+            let dest_name = Printf.sprintf "%s.fb2" (Ocaml_books.Fs.sanitize_filename title max_component_len) in
+            let dest_path = Filename.concat author_dir dest_name in
+
+            if not (path = dest_path) then
+              if dry_run then
+                Log.debug (fun m -> m "[dry-run] Would move %s → %s" path dest_path)
+              else begin
+                Log.debug (fun m -> m "Moving %s → %s" path dest_path);
+                Ocaml_books.Fs.mkdir_p author_dir;
+                Sys.rename path dest_path
+              end;
+          )
+          (fun e path ->
+            incr failures;
+            let reason = Printexc.to_string e in
+            Log.warn (fun m -> m "%s → FAILED: %s" (Filename.basename path) reason);
+        
+            if not dry_run then begin
+              let dest_name = Filename.basename path in
+              let dest_path = Filename.concat cfg.invalid_dir dest_name in
+              Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
+              Sys.rename path dest_path;
+              Log.debug (fun m -> m " → Moved %s to %s" path dest_path);
+            end;
+          )
+          fb2_files);
+
+        if !failures > 0 then
+          Log.info (fun m -> m "Organization complete: %d/%d files failed" !failures total)
+        else
+          Log.info (fun m -> m  "All %d files groupd successfully" total);
+        exit 0
+
+      | `SchemaInit dry_run ->
+        begin
+          try
+            Log.info (fun m -> m "Initialize DB schema");
+            let admconn = connect cfg true in
+            Db.drop_schema admconn;
+            Db.init_schema admconn;
+            Db.close admconn;
+          with e ->
+            let msg =
+              match e with
+              | Postgresql.Error pe -> Postgresql.string_of_error pe
+              | _ -> Printexc.to_string e in
+            print_endline msg;
+            exit 0
+        end
+        
+      | `Validate (source_dir, dry, overwrite, jobs) ->
+        let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
+        Log.info (fun m -> m "Validate mode (using Miou concurrency)\n Scanning: %s\n Failed files go to: %s\n Requested jobs: %d"
+          source_dir
+          cfg.invalid_dir
+          jobs);
+        if dry then Log.info (fun m -> m " [dry-run] No files will be moved");
+
+        let fb2_files = find_fb2_files source_dir in
+    
+        let total = List.length fb2_files in
+        Log.info (fun m -> m "Found %d .fb2 files" total);
+    
+        let failures = ref 0 in
+        ignore(parallel_execute jobs
+          (fun path ->
+            Ocaml_books.Fb2_parse.validate path;
+            Log.debug (fun m -> m "%s → OK" (Filename.basename path));
+          )
+          (fun e path ->
+            incr failures;
+            let reason = Printexc.to_string e in
+            Log.warn (fun m -> m "%s → FAILED: %s" (Filename.basename path) reason);
+        
+            if not dry then begin
+              let dest_name = Filename.basename path in
+              let dest_path = Filename.concat cfg.invalid_dir dest_name in
+              Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
+              Sys.rename path dest_path;
+              Log.debug (fun m -> m " → Moved %s to %s" path dest_path);
+            end;
+          )
+          fb2_files);
+      
+        if !failures > 0 then
+          Log.info (fun m -> m "Validation complete: %d/%d files failed" !failures total)
+        else
+          Log.info (fun m -> m "All %d files validated successfully" total);
+        exit 0
+
+      | `Index (source_dir, dry, overwrite, jobs) ->
+        let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
+        Log.info (fun m -> m "Index mode\n Scanning: %s\n Requested jobs: %d"
+          source_dir
+          jobs);
+        if dry then Log.info (fun m -> m " [dry-run] No files will be indexed");
+
+        let fb2_files = find_fb2_files source_dir in
+    
+        let total = List.length fb2_files in
+        Log.info (fun m -> m "Found %d .fb2 files" total);
+    
+        let failures = ref 0 in
+        let c = connect cfg false in
+        let result = parallel_execute jobs
+          (fun path ->
+            let book = Ocaml_books.Fb2_parse.parse_book_info path in
+            let id = Db.find_or_insert_book c book in
+            Log.debug (fun m -> m "%s → OK" (Filename.basename path));
+            id
+          )
+          (fun e path ->
+            incr failures;
+            let reason =
+              match e with
+              | Postgresql.Error pe -> Postgresql.string_of_error pe
+              | _ -> Printexc.to_string e in
+
+            Log.warn (fun m -> m "%s → FAILED: %s" (Filename.basename path) reason);
+            raise e
+          )
+          fb2_files
+        in
+        List.iter (function
+          | Ok id ->
+            Log.debug (fun m -> m "Ok: %s" id)
+          | Error _ -> ())
+          result
+        ;
+        if !failures > 0 then
+          Log.info (fun m -> m "Indexing complete: %d/%d files failed" !failures total)
+        else
+          Log.info (fun m -> m "All %d files indexed successfully" total);
+        exit 0
+
+      | `Help       -> ()
+    end
+
+  | Ok (`Version | `Help) -> exit 0
+  | Error _ -> exit 1
+
+let () = main ()

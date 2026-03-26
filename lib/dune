@@ -17,8 +17,15 @@
    uucp uutf
    re
    postgresql
+   logs fmt logs.fmt
+   logs.cli
  )
+
  ;(modules_without_implementation db)
- (preprocess (pps ppx_deriving_yojson))
+ (preprocess
+  (pps ppx_deriving_yojson
+       ppx_inline_test ppx_assert
+       ppx_expect
+ ))
  (flags :standard -g)
- )
+ (inline_tests))

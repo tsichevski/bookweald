@@ -13,7 +13,7 @@ let () =
     Printf.printf "Id %s\n%!" id;
 
     let id = find_or_insert_book conn
-      { id = "12345";
+      { ext_id = "12345";
         title="Book Title";
         encoding="utf8";
         authors=[{first_name=(Some "Arcady");middle_name=None;last_name=(Some "Strugatski");}];

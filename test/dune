@@ -2,12 +2,12 @@
  (name run_tests)
  (libraries alcotest ocaml_books)
  (modes byte exe)
- (preprocess (pps ppx_deriving_yojson))
- )
+ (preprocess (pps ppx_deriving_yojson)))
+
 (executable
- (name postgresql_test)
+ (name adhoc_test)
  (libraries
-   postgresql
+   ocaml_books
  )
  (modes exe)
  )
@@ -18,11 +18,6 @@
  )
  (modes exe)
  )
-; (executable
-;  (name fib)
-;  (libraries domainslib)
-;  (modes exe)
-;  )
 ; (executable
 ;  (name caqti_connect)
 ;  (libraries

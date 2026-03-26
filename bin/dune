@@ -2,5 +2,9 @@
  (public_name ocaml-books)
  (name cli)
  (modes byte exe)
- (flags :standard -g)
- (libraries ocaml_books zipc cmdliner miou))
+ (flags :standard -g -o)
+ (libraries ocaml_books
+            zipc
+            cmdliner
+            miou
+))

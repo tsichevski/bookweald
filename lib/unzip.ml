@@ -32,7 +32,7 @@ let read_file_binary path =
 
     @return [Ok paths] — list of full paths to successfully extracted .fb2 files (in reverse order of extraction)
     @return [Error msg] — error message if archive could not be processed or fallback failed *)
-let extract_fb2_files zip_path target_dir : (string list, string) result =
+let extract_fb2_files ?(overwrite:bool = true) zip_path target_dir : (string list, string) result =
   let size = (Unix.stat zip_path).Unix.st_size in
 
   if Int.to_float size > 4_500_000_000.0 then begin
@@ -59,13 +59,17 @@ let extract_fb2_files zip_path target_dir : (string list, string) result =
             match Zipc.Member.kind member with
             | Zipc.Member.Dir -> acc
             | Zipc.Member.File file ->
-               let name = Zipc.Member.path member in
-               if Filename.check_suffix name ".fb2" then
-                 match Zipc.File.to_binary_string file with
-                 | Ok data ->
-                    let basename = Filename.basename name in
-                    let out_path = Filename.concat target_dir basename in
-
+              let name = Zipc.Member.path member in
+              if Filename.check_suffix name ".fb2" then
+                match Zipc.File.to_binary_string file with
+                | Ok data ->
+                  let basename = Filename.basename name in
+                  let out_path = Filename.concat target_dir basename in
+                  if not overwrite && Sys.file_exists out_path then begin
+                    Printf.printf "Will not overwrite existing file in not overwrite mode: %s\n" out_path;
+                    acc
+                  end
+                  else begin
                     let dir = Filename.dirname out_path in
                     if not (Sys.file_exists dir) then Fs.mkdir_p dir;
 
@@ -75,6 +79,7 @@ let extract_fb2_files zip_path target_dir : (string list, string) result =
 
                     Printf.printf "Extracted: %s\n" basename;
                     out_path :: acc
+                  end
 
                  | Error e ->
                     Printf.eprintf "Failed to extract %s: %s\n"
