@@ -1,4 +1,12 @@
 open Ocaml_books.Db
+open Ocaml_books.Book
+open Ocaml_books.Person
+
+let person_create last_name first_name middle_name : person = { id=(normalize last_name first_name middle_name); first_name; middle_name; last_name}
+
+let person1 = person_create (Some " Лёва /! ") (Some "Николаёвич") (Some "Тол,ст.ой 1.")
+let person2 = person_create (Some "Fedor") None (Some "Dostoevski")
+let person3 = person_create (Some "Аркадий") None (Some "Стругацкий")
 
 let () =
   try
@@ -7,20 +15,20 @@ let () =
     init_schema admconn;
     close admconn;
     let conn = connect () in
-    let id = find_or_insert_person conn {first_name=(Some "First");middle_name=(Some "Middle");last_name=(Some "Last");} in
+    let id = find_or_insert_person conn person1 in
     Printf.printf "Id %s\n%!" id;
-    let id = find_or_insert_person conn {first_name=(Some "First");middle_name=None;last_name=(Some "Last");} in
+    let id = find_or_insert_person conn person2 in
     Printf.printf "Id %s\n%!" id;
 
     let id = find_or_insert_book conn
-      { digest = "12345";
-        title="Book Title";
-        encoding="utf8";
-        authors=[{first_name=(Some "Arcady");middle_name=None;last_name=(Some "Strugatski");}];
+      { ext_id = Some "12345";
+        version = None;
+        title = "Book Title";
+        encoding = "utf8";
+        authors = [person3];
         lang=(Some "ru");
         genre=(Some "sf");
-        filename="bla-bla.fb2"}
-      
+        filename="bla-bla.fb2"}      
     in
     Printf.printf "New book Id %s\n%!" id
 

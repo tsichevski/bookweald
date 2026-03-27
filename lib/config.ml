@@ -20,10 +20,9 @@ type t = {
   verbose         : bool;               (* If true: print detailed progress info *)
   max_component_len: int;               (* Maximum length of one filename component or 0 (default) for no limit *)
   jobs: int;                            (* Number of jobs domain pool, 1 to disable parallelism *)
-  index_file      : string;             (* Path to the index file *)
   log_file        : string option;      (* Path to the log file or None to log to stdout *)
-  log_level       : string option;      (* Logging level or None for default INFO or
-                                           Some ("quiet"|"app"|"error"|"warning"|"info"| "debug") *)
+  log_level       : string option;      (* Logging level or None for default INFO or Some ("quiet"|"app"|"error"|"warning"|"info"| "debug") *)
+  alias_file      : string option;      (* Location of optional person alias JSON file *)
 
   (* PostgreSQL connection *)
   
@@ -42,11 +41,11 @@ let default () : t = {
   library_dir      = Filename.concat (Sys.getenv "HOME") "books/incoming";
   target_dir       = Filename.concat (Sys.getenv "HOME") "books/organized";
   invalid_dir      = Filename.concat (Sys.getenv "HOME") "books/invalid";
+  alias_file       = None;
   dry_run          = false;
   verbose          = true;
   max_component_len = 0;
   jobs             = 1;
-  index_file       = Filename.concat (Sys.getenv "HOME") "books/index.db";
   log_file         = None;  
   log_level        = None;
   

@@ -1,5 +1,6 @@
 open Xmlm
 open Book
+open Person
 
 exception Fb2_parse_error of string
 
@@ -51,7 +52,7 @@ let parse_visit path h =
 let validate path =
   parse_visit path (fun input _ -> ignore(parse input (fun _ _ -> false)  []))
 
-let parse_book_info path =
+let parse_book_info path aliases =
   parse_visit path
     (fun input encoding ->
       if locate input ["description"; "FictionBook"] then
@@ -64,17 +65,28 @@ let parse_book_info path =
         let title = ref None in
         let lang = ref None in
         let genre = ref None in
+        let version = ref None in
         
         (** If first and/or last name is collected, create a new person record, append
             if no such person was appended earlier *)
         let append_current_author_unique () =
-          match !current_first_name, !current_middle_name, !current_last_name with
+          match !current_last_name, !current_first_name, !current_middle_name with
           | None, _, None ->
             current_middle_name := None;
-          | first_name, middle_name, last_name ->
+          | last_name, first_name, middle_name ->
+            let candidate = person_create last_name first_name middle_name in
+            let id = candidate.id in
+            let candidate =
+              match aliases with
+              | None -> candidate
+              | Some table -> match Hashtbl.find_opt table id with
+              | None -> candidate
+              | Some e ->
+                Log.debug (fun m -> m "Alias %s replaced by %s" id e.id);
+                e
+            in
             let current = !authors in
-            let candidate = { first_name; middle_name; last_name } in
-            if not (List.exists (fun y -> y = candidate) current) then
+            if not (List.exists (fun y -> y.id = id) current) then
               authors := candidate :: current;
             
             current_first_name := None;
@@ -90,7 +102,8 @@ let parse_book_info path =
               append_current_author_unique ()
             | _ -> ());
             false
-          | Some v as value->
+          | Some v ->
+            let value = Some (String.trim v) in
             (match path with
             | ["first-name"; "author"; ("title-info" | "document-info"); "description"] ->
               current_first_name := value
@@ -100,6 +113,8 @@ let parse_book_info path =
               current_last_name := value
             | ["id"; "document-info"; "description"] ->
               id := value
+            | ["version"; "document-info"; "description"] ->
+              version := value
             | ["book-title"; "title-info"; "description"] ->
               title := value
             | ["lang"; "title-info"; "description"] ->
@@ -113,18 +128,15 @@ let parse_book_info path =
         append_current_author_unique ();
 
         let filename = (Filename.chop_extension (Filename.basename path)) in
-        let digest, title =
-          match !id,!title with
-          | _, None -> failwith "Book has no title"
-          | None, Some title ->
-            Log.warn (fun m -> m "Book %s has no ID, will try filename instead" filename);
-            (filename, title)
-          | Some id, Some title ->
-            (id, title)
+        let title =
+          match !title with
+          | None -> failwith "Book has no title"
+          | Some title -> title
         in
         let authors = List.rev !authors in
-        { title;
-          digest;
+        { ext_id = !id;
+          version = !version;
+          title;
           authors;
           lang = !lang;
           genre = !genre;

@@ -302,6 +302,12 @@ let main () =
       | `Group (source_dir, dry_run, overwrite, max_component_len, jobs)
         ->
         let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
+
+        let aliases = match cfg.alias_file with
+        | None -> None
+        | Some path -> Some (Ocaml_books.Alias.load_aliases path)
+        in
+        
         let max_component_len = if max_component_len = 0 then cfg.max_component_len else max_component_len in
         Log.info (fun m -> m "Grouping books by author ...\nSource %s\nOrganize mode (max component length = %d bytes)\n Source: %s\n Target: %s"
           source_dir
@@ -317,7 +323,7 @@ let main () =
         let failures = ref 0 in
         ignore(parallel_execute jobs
           (fun path ->
-            let book = Ocaml_books.Fb2_parse.parse_book_info path in
+            let book = Ocaml_books.Fb2_parse.parse_book_info path aliases in
             let author =
               match book.authors with
               | [] -> "UnknownAuthor"
@@ -432,9 +438,15 @@ let main () =
     
         let failures = ref 0 in
         let c = connect cfg false in
+
+        let aliases = match cfg.alias_file with
+        | None -> None
+        | Some path -> Some (Ocaml_books.Alias.load_aliases path)
+        in
+
         let result = parallel_execute jobs
           (fun path ->
-            let book = Ocaml_books.Fb2_parse.parse_book_info path in
+            let book = Ocaml_books.Fb2_parse.parse_book_info path aliases in
             let id = Db.find_or_insert_book c book in
             Log.debug (fun m -> m "%s → OK" (Filename.basename path));
             id

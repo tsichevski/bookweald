@@ -6,6 +6,7 @@
 *)
 
 open Book
+open Person
 
 (** {1 Types} *)
 

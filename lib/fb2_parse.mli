@@ -17,11 +17,12 @@
 *)
 
 open Book
+open Person
 
 (** {1 Main parsing function} *)
 
-val parse_book_info : string -> book
-(** [parse_book_info path] parses the FB2 file located at [path] using a streaming XML parser.
+val parse_book_info : string -> (string, person) Hashtbl.t option -> book
+(** [parse_book_info path aliases] parses the FB2 file located at [path] using a streaming XML parser.
 
     Behavior:
     - Reads the file incrementally (low memory usage, suitable for large archives)
@@ -32,6 +33,7 @@ val parse_book_info : string -> book
     - Stops parsing early after the closing tag of the first relevant info block
 
     @param path Absolute or relative filesystem path to a .fb2 file
+    @param aliases Optional alias -> canonical author name table
     @return A [book] record populated with extracted title and author information
     @raise Fb2_parse_error if required metadata is missing or XML is invalid
     @raise Failure if the declared encoding is unsupported or file cannot be opened

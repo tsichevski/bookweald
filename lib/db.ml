@@ -5,6 +5,7 @@
 *)
 
 open Book
+open Person
 open Postgresql
 open Normalize
 
@@ -21,27 +22,23 @@ let opt_to_string = function
   | None   -> "<unknown>"
   | Some s -> s
 
-(** Try to generate book unique ID based on book info data.
-    Return the digest in hex *)
-let book_compound_id (b : book) : string =
-  String.concat "|" (b.title::b.digest::(List.map normalize_person_key b.authors))
-  |> Digest.string |> Digest.to_hex
-  
 let log_book (b : book) op =
-  Log.debug (fun m -> m "%s book: digest=%s title=%s file=%s encoding=%s" op b.digest b.title b.filename b.encoding)
+  Log.debug (fun m -> m "%s book: digest=%s title=%s file=%s encoding=%s" op (digest b) b.title b.filename b.encoding)
   
 let log_person ?(level = Logs.Debug) (p : person) op =
-  Log.msg level (fun m -> m "%s person: %s %s %s"
+  Log.msg level (fun m -> m "%s person: l:%s f:%s m:%s (%s)"
     op
+    (opt_to_string p.last_name)
     (opt_to_string p.first_name)
     (opt_to_string p.middle_name)
-    (opt_to_string p.last_name))
+    p.id
+  )
   
 (** Insert new book record *)
 let insert_book (c : connection) (b : book) =
   log_book b "Inserting";
-  let new_id = c#exec {|INSERT INTO books (digest, title, encoding, lang, genre, filename) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id|}
-    ~params:[| book_compound_id b; b.title; b.encoding; opt_to_param b.lang; opt_to_param b.genre; b.filename |]
+  let new_id = c#exec {|INSERT INTO books (digest, ext_id, version, title, encoding, lang, genre, filename) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id|}
+    ~params:[| digest b; opt_to_param b.ext_id; opt_to_param b.version; b.title; b.encoding; opt_to_param b.lang; opt_to_param b.genre; b.filename |]
     ~expect:[Tuples_ok]
   in
      if new_id#ntuples = 0 then
@@ -57,8 +54,13 @@ let find_person_opt (c : connection) (norm : string) =
     ~expect:[Tuples_ok]
   in
   match existing#ntuples with
-  | 0 -> None
-  | 1 -> Some (existing#getvalue 0 0)
+  | 0 ->
+    Log.debug (fun m -> m "No person found: %s" norm);
+    None
+  | 1 ->
+    let book_id = existing#getvalue 0 0 in
+    Log.debug (fun m -> m "Found: %s for %s" book_id norm);
+    Some book_id
   | _ -> failwith ("More than one person with id: " ^ norm)
 
 (** [insert_person c norm a] atomically registers an author in the
@@ -116,7 +118,7 @@ let insert_link (c : connection) book_id person_id =
 let delete_book (c : connection) (b : book) =
   log_book b "Deleting";
   let new_id = c#exec {|DELETE FROM books WHERE id=$1 AND title=$2, $3, $4) RETURNING id|}
-    ~params:[| book_compound_id b; b.title; opt_to_param b.lang; opt_to_param b.genre |]
+    ~params:[| digest b; b.title; opt_to_param b.lang; opt_to_param b.genre |]
     ~expect:[Tuples_ok]
   in
      if new_id#ntuples = 0 then
@@ -127,7 +129,7 @@ let delete_book (c : connection) (b : book) =
 let find_or_insert_book (c : connection) (b : book) : book_id =
   let title = b.title in
   let authors = b.authors in
-  let digest = book_compound_id b in
+  let digest = digest b in
   let filename = b.filename in
   (* Existing books with given book id and title *)
   log_book b "Looking for existing";
@@ -204,6 +206,8 @@ let init_schema (c : connection) =
     {sql| CREATE TABLE IF NOT EXISTS books (
             id SERIAL PRIMARY KEY,
             digest TEXT UNIQUE NOT NULL,
+            ext_id TEXT,
+            version TEXT,
             title TEXT,
             encoding TEXT,
             lang TEXT,
@@ -224,7 +228,6 @@ let init_schema (c : connection) =
             FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
             FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
           ) |sql};
-    {sql| CREATE INDEX IF NOT EXISTS idx_person_norm ON persons(normalized_name) |sql};
   ]
   in
   List.iter (fun q -> ignore (c#exec ~expect:[Command_ok] q)) queries;

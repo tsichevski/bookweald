@@ -1,5 +1,3 @@
-open Book
-
 (** Filter out anything but letters, replace 'ё' by 'ё', return the result lowercased *)
 let normalize_name s =
   let b = Buffer.create (String.length s) in
@@ -24,10 +22,3 @@ let normalize_name s =
     )
     () s;
   Buffer.contents b
-
-let normalize_person_key (a : person) : string =
-  let parts = List.filter_map Fun.id [a.last_name; a.first_name; a.middle_name] in
-  if List.is_empty parts then
-    failwith "Person has no name"
-  else
-    List.map normalize_name parts |> String.concat " "

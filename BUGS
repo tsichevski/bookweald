@@ -1,36 +1,3 @@
-2026-03-11  Vladimir Tsichevski  <Vladimir Tsichevski <vvt@goldencode.com>>
-
-	* Author info extraction problems:
-
-	-- there may be more than one author in the title-info element
-	-- the author element in document-info may be broken
-
-	Example:
-	 <description>
-  <title-info>
-   <author>
-    <first-name>Владимир</first-name>
-    <middle-name>Иванович</middle-name>
-    <last-name>Дмитревский</last-name>
-   </author>
-   <author>
-    <first-name>Борис</first-name>
-    <middle-name>Дмитриевич</middle-name>
-    <last-name>Четвериков</last-name>
-   </author>
-  </title-info>
-  <document-info>
-   <author>
-    <first-name>Alexx</first-name>
-    <last-name></last-name>
-   </author>
-  </document-info>
-
-	We have to:
-
-	-- collect all <author> elements to autor list
-	-- use the first author in the list to form the catalog name
-
 2026-02-24  Vladimir Tsichevski  <Vladimir Tsichevski <vvt@goldencode.com>>
 
 	* calmzip failed on fb2-799407-801214.zip: Unknown ZIP version
