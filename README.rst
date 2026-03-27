@@ -39,7 +39,7 @@ OCaml 5.x
 Location
 --------
 
-https://github.com/tsichevski/ocaml-books
+https://github.com/tsichevski/bookweald
 
 
 Current Libraries Used
@@ -67,7 +67,7 @@ Project Structure (current)
 
 ::
 
-  ocaml-books/
+  bookweald/
   ├── bin/
   │   ├── dune
   │   └── main.ml               # entry point (currently minimal/test)

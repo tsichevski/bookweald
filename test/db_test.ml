@@ -1,6 +1,6 @@
-open Ocaml_books.Db
-open Ocaml_books.Book
-open Ocaml_books.Person
+open Bookweald.Db
+open Bookweald.Book
+open Bookweald.Person
 
 let person_create last_name first_name middle_name : person = { id=(normalize last_name first_name middle_name); first_name; middle_name; last_name}
 

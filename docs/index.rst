@@ -14,7 +14,7 @@ OCaml
 Location
 --------
 
-https://github.com/tsichevski/ocaml-books.git
+https://github.com/tsichevski/bookweald.git
 
 Goals
 -----

@@ -1,20 +1,20 @@
 (executable
  (name run_tests)
- (libraries alcotest ocaml_books)
+ (libraries alcotest bookweald)
  (modes byte exe)
  (preprocess (pps ppx_deriving_yojson)))
 
 (executable
  (name adhoc_test)
  (libraries
-   ocaml_books
+   bookweald
  )
  (modes exe)
  )
 (executable
  (name db_test)
  (libraries
-   ocaml_books
+   bookweald
  )
  (modes exe)
  )
@@ -30,7 +30,7 @@
 ;  )
 ; (executable
 ;  (name bancos_index)
-;  (libraries ocaml_books bancos)
+;  (libraries bookweald bancos)
 ;  (modes exe)
 ;  )
 ; (executable

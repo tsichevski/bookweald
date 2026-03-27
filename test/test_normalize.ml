@@ -1,5 +1,5 @@
 open Alcotest
-open Ocaml_books.Normalize
+open Bookweald.Normalize
 
 let read_whole_binary_file (path : string) : string =
   In_channel.with_open_bin path In_channel.input_all

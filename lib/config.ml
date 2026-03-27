@@ -7,7 +7,7 @@
 
    Config locations checked in order:
    1. ./config.json (local, for project-specific overrides)
-   2. ~/.config/ocaml-books/config.json (user-global, standard XDG location)
+   2. ~/.config/bookweald/config.json (user-global, standard XDG location)
 
    All functions are pure except for I/O side-effects in load/create_default. *)
 

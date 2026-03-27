@@ -50,7 +50,7 @@ The tool searches for the configuration file in this order:
 1. ./config.json  
    (current working directory — useful for project-specific or per-session overrides)
 
-2. ~/.config/ocaml-books/config.json  
+2. ~/.config/bookweald/config.json  
    (standard user configuration directory on Linux/macOS)
 
 If no valid file is found or parsing fails, the tool falls back to the defaults above.
@@ -71,13 +71,13 @@ Creating default configuration
 
 Use the ``init`` subcommand::
 
-   ocaml-books init
+   bookweald init
 
-This creates ~/.config/ocaml-books/config.json with default values.
+This creates ~/.config/bookweald/config.json with default values.
 
 Alternatively, specify a custom path::
 
-   ocaml-books init --config ./my-config.json
+   bookweald init --config ./my-config.json
 
 This writes to the given path instead.
 

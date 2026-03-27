@@ -36,17 +36,17 @@ Update ``bin/dune``:
 
    (executable
     (name cli)
-    (public_name ocaml-books)   ; ← binary name when installed
-    (libraries ocaml_books unix))
+    (public_name bookweald)   ; ← binary name when installed
+    (libraries bookweald unix))
 
 Basic CLI implementation (bin/cli.ml)
 -------------------------------------
 
 ::
 
-   open Ocaml_books
+   open Bookweald
 
-   let usage_msg = "ocaml-books [command] [options]\n\
+   let usage_msg = "bookweald [command] [options]\n\
                     Commands:\n\
                     \  init          Create default configuration file\n\
                     \  import <path> Process ZIP file or directory\n\
@@ -80,7 +80,7 @@ Basic CLI implementation (bin/cli.ml)
 
      match cmd with
      | "init" ->
-         let path = Filename.concat (Sys.getenv "HOME") ".config/ocaml-books/config.json" in
+         let path = Filename.concat (Sys.getenv "HOME") ".config/bookweald/config.json" in
          (try Config.create_default path
           with e -> Printf.eprintf "Failed to create config: %s\n" (Printexc.to_string e))
      | "import" ->

@@ -1,6 +1,6 @@
 (library
- (name ocaml_books)
- (public_name ocaml-books)
+ (name bookweald)
+ (public_name bookweald)
  (synopsis "Manage FB2 archive")
  (libraries
    unix

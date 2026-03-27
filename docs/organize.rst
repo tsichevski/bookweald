@@ -33,13 +33,13 @@ Usage
 
 Basic::
 
-   ocaml-books organize
+   bookweald organize
 
 With options::
 
-   ocaml-books organize --verbose
-   ocaml-books organize --dry-run
-   ocaml-books organize --config ./custom-config.json
+   bookweald organize --verbose
+   bookweald organize --dry-run
+   bookweald organize --config ./custom-config.json
 
 
 Behavior details

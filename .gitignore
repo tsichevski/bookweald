@@ -35,6 +35,6 @@ setup.log
 # Local OPAM switch
 _opam/
 
-ocaml-books.opam
+bookweald.opam
 
 *~

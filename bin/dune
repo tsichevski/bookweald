@@ -1,9 +1,9 @@
 (executable
- (public_name ocaml-books)
+ (public_name bookweald)
  (name cli)
  (modes byte exe)
  (flags :standard -g -o)
- (libraries ocaml_books
+ (libraries bookweald
             zipc
             cmdliner
             miou

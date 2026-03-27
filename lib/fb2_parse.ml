@@ -4,7 +4,7 @@ open Person
 
 exception Fb2_parse_error of string
 
-module Log = (val Logs.src_log (Logs.Src.create "ocaml-books" ~doc:"Tool commands") : Logs.LOG)
+module Log = (val Logs.src_log (Logs.Src.create "bookweald" ~doc:"Tool commands") : Logs.LOG)
 
 let rec parse input handle path =
   let signal = Xmlm.input input in

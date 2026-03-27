@@ -1,6 +1,6 @@
 (lang dune 3.21)
 
-(name ocaml-books)
+(name bookweald)
 
 (wrapped_executables false)
 
@@ -18,7 +18,7 @@
 (documentation https://url/to/documentation)
 
 (package
- (name ocaml-books)
+ (name bookweald)
  (synopsis "Home Book Library Management Project")
  (description "Manage Personal Book Repository in FB2 Format")
  (depends
@@ -30,6 +30,6 @@
  )
 
  (tags
-  ("ocaml" "books")))
+  ("ocaml" "book" "library")))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

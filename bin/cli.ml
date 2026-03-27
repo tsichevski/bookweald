@@ -14,17 +14,17 @@ Common flags:
 --max-component-len / -m N   max length of filename/dir components (bytes; 0 = no limit)
 --jobs / -j N           max number of domains/threads for parallel work (1 = disable)
 
-Dependencies: cmdliner, ocaml_books (project library), Moiu *)
+Dependencies: cmdliner, bookweald (project library), Moiu *)
 open Cmdliner
-module Db = Ocaml_books.Db
+module Db = Bookweald.Db
 open Db
 
-module Log = (val Logs.src_log (Logs.Src.create "ocaml-books" ~doc:"Tool commands") : Logs.LOG)
+module Log = (val Logs.src_log (Logs.Src.create "bookweald" ~doc:"Tool commands") : Logs.LOG)
 
 (** Global config file term *)
 let config_term : string option Term.t =
   let doc = "Path to the configuration file. \
-  If omitted, defaults to ~/.config/ocaml-books/config.json." in
+  If omitted, defaults to ~/.config/bookweald/config.json." in
   Arg.(value & opt (some string) None &
        info ["c"; "config"] ~docv:"FILE" ~doc)
 
@@ -62,7 +62,7 @@ let parallel_execute jobs action on_failure files =
 This function is used in several commands. *)
 let find_fb2_files dir =
   let rec aux d accu =
-    if Ocaml_books.Fs.is_regular_file d then
+    if Bookweald.Fs.is_regular_file d then
       if Filename.check_suffix d ".fb2" then
         d::accu
       else
@@ -80,7 +80,7 @@ let find_fb2_files dir =
         
   aux dir []
 
-let connect (cfg : Ocaml_books.Config.t) as_admin =
+let connect (cfg : Bookweald.Config.t) as_admin =
   let user,password = if as_admin then (cfg.db_admin, cfg.db_admin_passwd) else (cfg.db_user, cfg.db_passwd) in
   Db.connect ~host:cfg.db_host ~user:user ~password:password ~port:cfg.db_port ~dbname:cfg.db_name ()
 
@@ -115,7 +115,7 @@ let init_cmd =
   let doc = "Initialize default configuration file" in
   let man = [
     `S Manpage.s_description;
-    `P "Creates ~/.config/ocaml-books/config.json with default values."
+    `P "Creates ~/.config/bookweald/config.json with default values."
   ] in
   (* Combine them into one action term *)
   let action_term =
@@ -246,18 +246,18 @@ let main () =
     | Some p -> p
     | None ->
       let home = Sys.getenv "HOME" in
-      Filename.concat (Filename.concat home ".config") "ocaml-books/config.json"
+      Filename.concat (Filename.concat home ".config") "bookweald/config.json"
     in    
     Log.debug (fun m -> m "Loading configuration from %s" config_path);
     let cfg =
       if Sys.file_exists config_path then
-        Ocaml_books.Config.load config_path
+        Bookweald.Config.load config_path
       else
-        Ocaml_books.Config.default () in
+        Bookweald.Config.default () in
         
     ignore(match cfg.log_file with
     | None -> Logs.set_reporter (Logs.format_reporter ())
-    | Some file -> Ocaml_books.Logging.setup_logs file);
+    | Some file -> Bookweald.Logging.setup_logs file);
 
     Logs.set_level (match cfg.log_level with
     | None -> (Some Logs.Info)
@@ -274,7 +274,7 @@ let main () =
           Log.info (fun m -> m "[dry-run] Would extract from %s to %s" zip cfg.library_dir)
         else begin
           Log.info (fun m -> m "Extract %s (dry-run=%b, overwrite=%b)" zip dry_run overwrite);
-          match Ocaml_books.Unzip.extract_fb2_files ~overwrite zip cfg.library_dir with
+          match Bookweald.Unzip.extract_fb2_files ~overwrite zip cfg.library_dir with
           | Ok extracted ->
             Log.info (fun m -> m "Extracted %d FB2 files" (List.length extracted));
             exit 0
@@ -289,9 +289,9 @@ let main () =
             Log.info (fun m -> m "[dry-run] Would create default config");
             exit 0
           end else
-            let path = Filename.concat (Sys.getenv "HOME") ".config/ocaml-books/config.json" in
+            let path = Filename.concat (Sys.getenv "HOME") ".config/bookweald/config.json" in
             try
-              Ocaml_books.Config.create_default path;
+              Bookweald.Config.create_default path;
               Log.info (fun m -> m "Created config: %s" path);
               exit 0
             with e ->
@@ -305,7 +305,7 @@ let main () =
 
         let aliases = match cfg.alias_file with
         | None -> None
-        | Some path -> Some (Ocaml_books.Alias.load_aliases path)
+        | Some path -> Some (Bookweald.Alias.load_aliases path)
         in
         
         let max_component_len = if max_component_len = 0 then cfg.max_component_len else max_component_len in
@@ -323,7 +323,7 @@ let main () =
         let failures = ref 0 in
         ignore(parallel_execute jobs
           (fun path ->
-            let book = Ocaml_books.Fb2_parse.parse_book_info path aliases in
+            let book = Bookweald.Fb2_parse.parse_book_info path aliases in
             let author =
               match book.authors with
               | [] -> "UnknownAuthor"
@@ -333,8 +333,8 @@ let main () =
                 | parts -> String.concat " " parts
             in
             let title = book.title in
-            let author_dir = Filename.concat cfg.target_dir (Ocaml_books.Fs.sanitize_filename author max_component_len) in
-            let dest_name = Printf.sprintf "%s.fb2" (Ocaml_books.Fs.sanitize_filename title max_component_len) in
+            let author_dir = Filename.concat cfg.target_dir (Bookweald.Fs.sanitize_filename author max_component_len) in
+            let dest_name = Printf.sprintf "%s.fb2" (Bookweald.Fs.sanitize_filename title max_component_len) in
             let dest_path = Filename.concat author_dir dest_name in
 
             if not (path = dest_path) then
@@ -342,7 +342,7 @@ let main () =
                 Log.debug (fun m -> m "[dry-run] Would move %s → %s" path dest_path)
               else begin
                 Log.debug (fun m -> m "Moving %s → %s" path dest_path);
-                Ocaml_books.Fs.mkdir_p author_dir;
+                Bookweald.Fs.mkdir_p author_dir;
                 Sys.rename path dest_path
               end;
           )
@@ -354,7 +354,7 @@ let main () =
             if not dry_run then begin
               let dest_name = Filename.basename path in
               let dest_path = Filename.concat cfg.invalid_dir dest_name in
-              Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
+              Bookweald.Fs.mkdir_p cfg.invalid_dir;
               Sys.rename path dest_path;
               Log.debug (fun m -> m " → Moved %s to %s" path dest_path);
             end;
@@ -400,7 +400,7 @@ let main () =
         let failures = ref 0 in
         ignore(parallel_execute jobs
           (fun path ->
-            Ocaml_books.Fb2_parse.validate path;
+            Bookweald.Fb2_parse.validate path;
             Log.debug (fun m -> m "%s → OK" (Filename.basename path));
           )
           (fun e path ->
@@ -411,7 +411,7 @@ let main () =
             if not dry then begin
               let dest_name = Filename.basename path in
               let dest_path = Filename.concat cfg.invalid_dir dest_name in
-              Ocaml_books.Fs.mkdir_p cfg.invalid_dir;
+              Bookweald.Fs.mkdir_p cfg.invalid_dir;
               Sys.rename path dest_path;
               Log.debug (fun m -> m " → Moved %s to %s" path dest_path);
             end;
@@ -441,12 +441,12 @@ let main () =
 
         let aliases = match cfg.alias_file with
         | None -> None
-        | Some path -> Some (Ocaml_books.Alias.load_aliases path)
+        | Some path -> Some (Bookweald.Alias.load_aliases path)
         in
 
         let result = parallel_execute jobs
           (fun path ->
-            let book = Ocaml_books.Fb2_parse.parse_book_info path aliases in
+            let book = Bookweald.Fb2_parse.parse_book_info path aliases in
             let id = Db.find_or_insert_book c book in
             Log.debug (fun m -> m "%s → OK" (Filename.basename path));
             id
