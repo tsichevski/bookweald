@@ -28,7 +28,6 @@ let config_term : string option Term.t =
   Arg.(value & opt (some string) None &
        info ["c"; "config"] ~docv:"FILE" ~doc)
 
-
 (** Helper to create a full Cmd.t with global config *)
 let make_cmd name doc man action_term =
   let info = Cmd.info name ~doc ~man in
@@ -117,7 +116,6 @@ let init_cmd =
     `S Manpage.s_description;
     `P "Creates ~/.config/bookweald/config.json with default values."
   ] in
-  (* Combine them into one action term *)
   let action_term =
     Term.(const (fun dry -> `Init dry) $ dry_run)
   in
@@ -144,7 +142,6 @@ let extract_cmd =
   ] in
   let zip_file = Arg.(required & pos 0 (some string) None & info [] ~docv:"ZIPFILE") in
 
-  (* Combine them into one action term *)
   let action_term =
     Term.(const (fun zip dry overwrite -> `Extract (zip, dry, overwrite))
           $ zip_file
@@ -189,7 +186,7 @@ let validate_cmd =
   in
   make_cmd "validate" doc man action_term
 
-(** Command "index" — parses all FB2 files and updates index *)
+(** Command "index" — parses all FB2 files and adds them to index *)
 let index_cmd =
   let doc = "Parse all FB2 files in the specified directory and add them to index" in
   let man = [
