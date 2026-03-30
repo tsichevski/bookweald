@@ -19,7 +19,7 @@
     Fields control library paths, behavior flags, parallelism, logging,
     author aliases, and PostgreSQL connection settings.
 
-    Example JSON snippet:
+    Example JSON snippet (new grouped style):
 
     {[
       {
@@ -27,8 +27,15 @@
         "target_dir": "/home/user/books/organized",
         "dry_run": false,
         "jobs": 4,
-        "db_host": "localhost"
-        ...
+        "database": {
+          "host": "localhost",
+          "port": 5432,
+          "user": "books",
+          "passwd": "books",
+          "name": "books",
+          "admin": "admin",
+          "admin_passwd": "admin"
+        }
       }
     ]}
 *)
@@ -63,41 +70,49 @@ type t = {
   (** Optional path to author alias JSON file (see {!Alias.load_aliases}). *)
   alias_file : string option;
 
-  (* PostgreSQL connection settings *)
+  (** Grouped PostgreSQL connection settings (preferred). *)
+  database : database_config;
+} [@@deriving yojson { strict = false }]
 
+and database_config = {
   (** Database hostname. *)
-  db_host : string;
+  host : string;
 
   (** Database port (default: 5432). *)
-  db_port : int;
+  port : int;
 
   (** Database username for normal operations. *)
-  db_user : string;
+  user : string;
 
   (** Password for the normal database user. *)
-  db_passwd : string;
+  passwd : string;
 
   (** Database name. *)
-  db_name : string;
+  name : string;
 
   (** Admin username (used for schema initialization). *)
-  db_admin : string;
+  admin : string;
 
   (** Admin password (used for schema initialization). *)
-  db_admin_passwd : string;
+  admin_passwd : string;
 } [@@deriving yojson { strict = false }]
+
+(** [default_database ()] returns sensible defaults for the database section. *)
+let default_database () : database_config =
+  {
+    host         = "localhost";
+    port         = 5432;
+    user         = "books";
+    passwd       = "books";
+    name         = "books";
+    admin        = "admin";
+    admin_passwd = "admin"
+  }
 
 (** [default ()] returns the hardcoded default configuration.
 
     Paths are based on ``$HOME/books/...``. Most optional fields are [None].
     Useful as a fallback when no config file is found or when creating a new one.
-
-    Example:
-
-    {[
-      let cfg = Config.default () in
-      cfg.library_dir = "/home/user/books/incoming"
-    ]}
 *)
 let default () : t =
   let home = Sys.getenv "HOME" in
@@ -112,14 +127,8 @@ let default () : t =
     log_file         = None;
     log_level        = None;
 
-    (* PostgreSQL defaults *)
-    db_host          = "localhost";
-    db_port          = 5432;
-    db_user          = "books";
-    db_passwd        = "books";
-    db_name          = "books";
-    db_admin         = "admin";
-    db_admin_passwd  = "admin"
+    (* PostgreSQL defaults – grouped *)
+    database         = default_database ()
   }
 
 (** [load path] loads and parses a configuration from the given JSON file.

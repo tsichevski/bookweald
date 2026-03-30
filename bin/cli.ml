@@ -80,8 +80,9 @@ let find_fb2_files dir =
   aux dir []
 
 let connect (cfg : Bookweald.Config.t) as_admin =
-  let user,password = if as_admin then (cfg.db_admin, cfg.db_admin_passwd) else (cfg.db_user, cfg.db_passwd) in
-  Db.connect ~host:cfg.db_host ~user:user ~password:password ~port:cfg.db_port ~dbname:cfg.db_name ()
+  let db = cfg.database in
+  let user,password = if as_admin then (db.admin, db.admin_passwd) else (db.user, db.passwd) in
+  Db.connect ~host:db.host ~user:user ~password:password ~port:db.port ~dbname:db.name ()
 
 let dry_run =
   let doc = "Do not actually write anything, just show what would happen." in
