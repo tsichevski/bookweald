@@ -25,8 +25,8 @@ let normalize_chunk s =
       | `Malformed e -> failwith ("Mailformed char: " ^ e)
     )
     () s;
-  Buffer.contents b
+  Buffer.contents b |> Utils.trim_opt
 
 (** Filter out anything but letters, replace 'ё' by 'ё', return the result title-cased *)
-let normalize_name s =
-  String.split_on_char '-' s |> List.map normalize_chunk |> String.concat "-"
+let normalize_name s : string option =
+  Utils.filter_map_concat s '-' normalize_chunk

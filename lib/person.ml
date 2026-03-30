@@ -18,22 +18,18 @@ type person = {
 (** [normalize last_name first_name middle_name] concatenates the non-empty name parts
     after applying [Normalize.normalize_name] to each.
     Raises [Failure] if all parts are empty. *)
-let normalize last_name first_name middle_name : string =
-  let parts = List.filter_map Fun.id [last_name; first_name; middle_name] in
-  if List.is_empty parts then
-    failwith "Person has no name"
-  else
-    List.map Normalize.normalize_name parts |> String.concat " "
+let normalize last_name first_name middle_name : string option =
+  Utils.filter_map_concat_list (List.filter_map Fun.id [last_name; first_name; middle_name]) ' ' Normalize.normalize_name
 
-(** [normalize_person_key p] returns a normalized string key for the person.
-    Used for grouping books by author and for map/set keys. *)
-let normalize_person_key {last_name; first_name; middle_name} : string =
-  normalize last_name first_name middle_name
-
-(** [person_create last_name first_name middle_name] creates a new [person] record.
-    The [id] field is set to the normalized name. *)
-let person_create last_name first_name middle_name : person =
-  { id = normalize last_name first_name middle_name;
+(** [person_create_exn last_name first_name middle_name] creates a new [person] record.
+    The [id] field is set to the normalized name.
+    Throws error if name normalized to None.
+*)
+let person_create_exn last_name first_name middle_name : person =
+  match normalize last_name first_name middle_name with
+  | None -> failwith "Attempt to create person with empty normalized name"
+  | Some id -> 
+  { id;
     first_name;
     middle_name;
     last_name }

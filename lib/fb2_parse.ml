@@ -4,7 +4,7 @@ open Person
 
 exception Fb2_parse_error of string
 
-module Log = (val Logs.src_log (Logs.Src.create "bookweald" ~doc:"Tool commands") : Logs.LOG)
+module Log = (val Logs.src_log (Logs.Src.create "fb2_parse" ~doc:"Parsing FB2 document") : Logs.LOG)
 
 let rec parse input handle path =
   let signal = Xmlm.input input in
@@ -14,7 +14,6 @@ let rec parse input handle path =
   | `Dtd (Some dtd) ->
     parse input handle path
   | `El_start ((_, tag), _) ->
-    (* Printf.printf "Tag %s [%s]\n" tag (String.concat "/" path); *)
     let path' = tag::path in
     handle None path' || parse input handle path'
   | `El_end ->
@@ -56,7 +55,6 @@ let parse_book_info path aliases =
   parse_visit path
     (fun input encoding ->
       if locate input ["description"; "FictionBook"] then
-        (** Parse the title-info element contents *)
         let authors = ref [] in
         let current_first_name = ref None in
         let current_middle_name = ref None in
@@ -74,24 +72,28 @@ let parse_book_info path aliases =
           | None, _, None ->
             current_middle_name := None;
           | last_name, first_name, middle_name ->
-            let candidate = person_create last_name first_name middle_name in
-            let id = candidate.id in
-            let candidate =
-              match aliases with
-              | None -> candidate
-              | Some table -> match Hashtbl.find_opt table id with
-              | None -> candidate
-              | Some e ->
-                Log.debug (fun m -> m "Alias %s replaced by %s" id e.id);
-                e
-            in
-            let current = !authors in
-            if not (List.exists (fun y -> y.id = id) current) then
-              authors := candidate :: current;
+            match normalize last_name first_name middle_name with
+            | None ->
+              Log.warn (fun m -> m "Ignoring author with name normalized to none");
+            | Some id -> 
+              let candidate = { id; first_name; middle_name; last_name } in
+              let id = candidate.id in
+              let candidate =
+                match aliases with
+                | None -> candidate
+                | Some table -> match Hashtbl.find_opt table id with
+                | None -> candidate
+                | Some e ->
+                  Log.debug (fun m -> m "Alias %s replaced by %s" id e.id);
+                  e
+              in
+              let current = !authors in
+              if not (List.exists (fun y -> y.id = id) current) then
+                authors := candidate :: current;
             
-            current_first_name := None;
-            current_middle_name := None;
-            current_last_name := None;
+              current_first_name := None;
+              current_middle_name := None;
+              current_last_name := None;
         in
         
         ignore (parse input (fun txt path ->
@@ -127,7 +129,7 @@ let parse_book_info path aliases =
 
         append_current_author_unique ();
 
-        let filename = (Filename.chop_extension (Filename.basename path)) in
+        let filename = Filename.basename path |> Filename.chop_extension in
         let title =
           match !title with
           | None -> failwith "Book has no title"

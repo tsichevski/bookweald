@@ -35,7 +35,7 @@ type book = {
 let digest {ext_id; version; title; authors} : string =
   let ext_id = Option.value ext_id ~default:"" in
   let version = Option.value version ~default:"" in
-  title :: ext_id :: version :: (List.map normalize_person_key authors)
+  title :: ext_id :: version :: (List.map (fun a -> a.id) authors)
   |> String.concat "|"
   |> Digest.string
   |> Digest.to_hex

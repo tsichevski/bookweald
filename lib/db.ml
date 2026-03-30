@@ -101,7 +101,7 @@ RETURNING id
     new_id#getvalue 0 0
 
 let find_or_insert_person (c : connection) a =
-  let norm = normalize_person_key a in
+  let norm = a.id in
   log_person a "Find or Insert";
   match find_person_opt c norm with
   | Some id -> id
@@ -164,7 +164,7 @@ let find_or_insert_book (c : connection) (b : book) : book_id =
       let existing_norms = collect [] 0 in
       
       (* Collect missing persons *)
-      (book_id, List.filter (fun a -> List.exists (fun n -> not ((normalize_person_key a) = n)) existing_norms) authors)
+      (book_id, List.filter (fun a -> List.exists (fun n -> not (a.id = n)) existing_norms) authors)
       
     | n ->
       Log.warn (fun m -> m "More than one book (%d) with same id and title found" n);

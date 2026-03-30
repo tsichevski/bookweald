@@ -16,14 +16,14 @@ open Person
     - ["Dostoevsky Fyodor Mikhailovich"] → full three-part name
     - ["Pushkin"] → person with only last name
 *)
-let person_from_string s : person =
+let person_from_string_exn s : person =
   match String.split_on_char ' ' s with
   | [last_name; first_name; middle_name] ->
-      person_create (Some last_name) (Some first_name) (Some middle_name)
+      person_create_exn (Some last_name) (Some first_name) (Some middle_name)
   | [last_name; first_name] ->
-      person_create (Some last_name) (Some first_name) None
+      person_create_exn (Some last_name) (Some first_name) None
   | [last_name] ->
-      person_create (Some last_name) None None
+      person_create_exn (Some last_name) None None
   | _ ->
       failwith ("Cannot parse to person: " ^ s)
 
@@ -38,7 +38,7 @@ let person_from_string s : person =
       }
     ]}
 
-    * Each key is a canonical person string (passed to [person_from_string])
+    * Each key is a canonical person string (passed to [person_from_string_exn])
     * Each value is a JSON array of strings representing aliases
 
     All strings (both keys and alias values) are automatically trimmed.
@@ -65,7 +65,7 @@ let load_aliases path : (string, person) Hashtbl.t =
               | `String alias ->
                   Hashtbl.add table
                     (String.trim alias)
-                    (person_from_string (String.trim canonical))
+                    (person_from_string_exn (String.trim canonical))
               | _ -> ()
             ) alias_list
         | _ -> ()

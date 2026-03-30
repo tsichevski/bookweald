@@ -1,12 +1,11 @@
+(** Warning: this test resets the default DB *)
 open Bookweald.Db
 open Bookweald.Book
 open Bookweald.Person
 
-let person_create last_name first_name middle_name : person = { id=(normalize last_name first_name middle_name); first_name; middle_name; last_name}
-
-let person1 = person_create (Some " Лёва /! ") (Some "Николаёвич") (Some "Тол,ст.ой 1.")
-let person2 = person_create (Some "Fedor") None (Some "Dostoevski")
-let person3 = person_create (Some "Аркадий") None (Some "Стругацкий")
+let person1 = person_create_exn (Some " Лёва /! ") (Some "Николаёвич") (Some "Тол,ст.ой 1.")
+let person2 = person_create_exn (Some "Fedor") None (Some "Dostoevski")
+let person3 = person_create_exn (Some "Аркадий") None (Some "Стругацкий")
 
 let () =
   try

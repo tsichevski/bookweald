@@ -40,3 +40,45 @@ let substring_index_from haystack needle start =
     @return [Some pos] or [None] *)
 let substring_index haystack needle =
   substring_index_from haystack needle 0
+
+(** [trim_opt s] removes leading and trailing whitespace from the string [s].
+
+    If the resulting string is empty (i.e. [s] contained only whitespace),
+    it returns [None]. Otherwise it returns [Some trimmed_string].
+
+    This is useful when you want to treat a whitespace-only string
+    the same as an absent value.
+
+    {b Example:}
+
+    {[
+      trim_opt "  hello world  " = Some "hello world"
+      trim_opt "   " = None
+      trim_opt "" = None
+    ]}
+*)
+let trim_opt s =
+  match String.trim s with
+  | "" -> None
+  | s  -> Some s
+  
+(** [filter_map_concat_list l ch f] applies the function [f] to each l item,
+    filters out [None] values, and if any non-[None] results remain, concatenates
+    them back using [ch] as separator, trims the final string, and returns [Some result].
+    Returns [None] if the final result would be empty or if no
+    parts survived the mapping/filtering.
+*)
+let filter_map_concat_list l ch f =
+  match
+    List.map f l |> List.filter_map Fun.id
+  with
+  | [] -> None
+  | l ->
+    String.concat (String.make 1 ch) l |> trim_opt
+
+(** [filter_map_concat s ch f] splits the string [s] on character [ch],
+    and passes the result to [filter_map_concat_list]
+*)
+let filter_map_concat s sep f =
+  filter_map_concat_list (String.split_on_char sep s) sep f
+
