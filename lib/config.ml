@@ -62,6 +62,11 @@ type t = {
   (** Optional path to a log file. If [None], logs go to stdout. *)
   log_file : string option;
 
+  (** If [true] and [log_file] is set: truncate the log file on startup
+      (drop existing content). Otherwise append (default).
+      Has no effect when [log_file = None]. *)
+  drop_existing_log_file_on_start : bool;
+
   (** Optional logging level override.
       Supported values: "quiet", "error", "warning", "info", "debug", "app".
       If [None], the default level (INFO) is used. *)
@@ -126,7 +131,7 @@ let default () : t =
     jobs             = 1;
     log_file         = None;
     log_level        = None;
-
+    drop_existing_log_file_on_start = false;
     (* PostgreSQL defaults – grouped *)
     database         = default_database ()
   }

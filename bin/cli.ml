@@ -16,8 +16,14 @@ Common flags:
 
 Dependencies: cmdliner, bookweald (project library), Moiu *)
 open Cmdliner
+
 module Db = Bookweald.Db
-open Db
+module Fs = Bookweald.Fs
+module Config = Bookweald.Config
+module Logging = Bookweald.Logging
+module Unzip = Bookweald.Unzip
+module Fb2_parse = Bookweald.Fb2_parse
+module Alias = Bookweald.Alias
 
 module Log = (val Logs.src_log (Logs.Src.create "bookweald" ~doc:"Tool commands") : Logs.LOG)
 
@@ -61,7 +67,7 @@ let parallel_execute jobs action on_failure files =
 This function is used in several commands. *)
 let find_fb2_files dir =
   let rec aux d accu =
-    if Bookweald.Fs.is_regular_file d then
+    if Fs.is_regular_file d then
       if Filename.check_suffix d ".fb2" then
         d::accu
       else
@@ -79,7 +85,7 @@ let find_fb2_files dir =
         
   aux dir []
 
-let connect (cfg : Bookweald.Config.t) as_admin =
+let connect (cfg : Config.t) as_admin =
   let db = cfg.database in
   let user,password = if as_admin then (db.admin, db.admin_passwd) else (db.user, db.passwd) in
   Db.connect ~host:db.host ~user:user ~password:password ~port:db.port ~dbname:db.name ()
@@ -229,6 +235,7 @@ let main () =
     init_cmd;
     schema_init_cmd;
     extract_cmd;
+    validate_cmd;
     group_cmd;
     index_cmd;
   ] in
@@ -247,14 +254,14 @@ let main () =
     Log.debug (fun m -> m "Loading configuration from %s" config_path);
     let cfg =
       if Sys.file_exists config_path then
-        Bookweald.Config.load config_path
+        Config.load config_path
       else
-        Bookweald.Config.default () in
+        Config.default () in
         
     ignore(match cfg.log_file with
     | None -> Logs.set_reporter (Logs.format_reporter ())
-    | Some file -> Bookweald.Logging.setup file);
-
+    | Some p -> Logging.setup cfg.drop_existing_log_file_on_start p);
+    
     Logs.set_level (match cfg.log_level with
     | None -> (Some Logs.Info)
     | Some name -> 
@@ -270,7 +277,7 @@ let main () =
           Log.info (fun m -> m "[dry-run] Would extract from %s to %s" zip cfg.library_dir)
         else begin
           Log.info (fun m -> m "Extract %s (dry-run=%b, overwrite=%b)" zip dry_run overwrite);
-          match Bookweald.Unzip.extract_fb2_files ~overwrite zip cfg.library_dir with
+          match Unzip.extract_fb2_files ~overwrite zip cfg.library_dir with
           | Ok extracted ->
             Log.info (fun m -> m "Extracted %d FB2 files" (List.length extracted));
             exit 0
@@ -287,7 +294,7 @@ let main () =
           end else
             let path = Filename.concat (Sys.getenv "HOME") ".config/bookweald/config.json" in
             try
-              Bookweald.Config.create_default path;
+              Config.create_default path;
               Log.info (fun m -> m "Created config: %s" path);
               exit 0
             with e ->
@@ -301,7 +308,7 @@ let main () =
 
         let aliases = match cfg.alias_file with
         | None -> None
-        | Some path -> Some (Bookweald.Alias.load_aliases path)
+        | Some path -> Some (Alias.load_aliases path)
         in
         
         let max_component_len = if max_component_len = 0 then cfg.max_component_len else max_component_len in
@@ -319,7 +326,7 @@ let main () =
         let failures = ref 0 in
         ignore(parallel_execute jobs
           (fun path ->
-            let book = Bookweald.Fb2_parse.parse_book_info path aliases in
+            let book = Fb2_parse.parse_book_info path aliases in
             let author =
               match book.authors with
               | [] -> "UnknownAuthor"
@@ -329,8 +336,8 @@ let main () =
                 | parts -> String.concat " " parts
             in
             let title = book.title in
-            let author_dir = Filename.concat cfg.target_dir (Bookweald.Fs.sanitize_filename author max_component_len) in
-            let dest_name = Printf.sprintf "%s.fb2" (Bookweald.Fs.sanitize_filename title max_component_len) in
+            let author_dir = Filename.concat cfg.target_dir (Fs.sanitize_filename author max_component_len) in
+            let dest_name = Printf.sprintf "%s.fb2" (Fs.sanitize_filename title max_component_len) in
             let dest_path = Filename.concat author_dir dest_name in
 
             if not (path = dest_path) then
@@ -338,7 +345,7 @@ let main () =
                 Log.debug (fun m -> m "[dry-run] Would move %s → %s" path dest_path)
               else begin
                 Log.debug (fun m -> m "Moving %s → %s" path dest_path);
-                Bookweald.Fs.mkdir_p author_dir;
+                Fs.mkdir_p author_dir;
                 Sys.rename path dest_path
               end;
           )
@@ -350,7 +357,7 @@ let main () =
             if not dry_run then begin
               let dest_name = Filename.basename path in
               let dest_path = Filename.concat cfg.invalid_dir dest_name in
-              Bookweald.Fs.mkdir_p cfg.invalid_dir;
+              Fs.mkdir_p cfg.invalid_dir;
               Sys.rename path dest_path;
               Log.debug (fun m -> m " → Moved %s to %s" path dest_path);
             end;
@@ -382,11 +389,11 @@ let main () =
         
       | `Validate (source_dir, dry, overwrite, jobs) ->
         let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
-        Log.info (fun m -> m "Validate mode (using Miou concurrency)\n Scanning: %s\n Failed files go to: %s\n Requested jobs: %d"
-          source_dir
-          cfg.invalid_dir
-          jobs);
-        if dry then Log.info (fun m -> m " [dry-run] No files will be moved");
+        Log.info (fun m ->
+          if dry then
+            m "Validate mode\n Scanning: %s\n %s\n Requested jobs: %d" source_dir "[dry-run] No files/DB will be changed" jobs
+          else
+            m "Validate mode\n Scanning: %s\n Failed files go to: %s\n Requested jobs: %d" source_dir cfg.invalid_dir jobs);
 
         let fb2_files = find_fb2_files source_dir in
     
@@ -396,7 +403,7 @@ let main () =
         let failures = ref 0 in
         ignore(parallel_execute jobs
           (fun path ->
-            Bookweald.Fb2_parse.validate path;
+            Fb2_parse.validate path;
             Log.debug (fun m -> m "%s → OK" (Filename.basename path));
           )
           (fun e path ->
@@ -407,7 +414,7 @@ let main () =
             if not dry then begin
               let dest_name = Filename.basename path in
               let dest_path = Filename.concat cfg.invalid_dir dest_name in
-              Bookweald.Fs.mkdir_p cfg.invalid_dir;
+              Fs.mkdir_p cfg.invalid_dir;
               Sys.rename path dest_path;
               Log.debug (fun m -> m " → Moved %s to %s" path dest_path);
             end;
@@ -437,12 +444,12 @@ let main () =
 
         let aliases = match cfg.alias_file with
         | None -> None
-        | Some path -> Some (Bookweald.Alias.load_aliases path)
+        | Some path -> Some (Alias.load_aliases path)
         in
 
         let result = parallel_execute jobs
           (fun path ->
-            let book = Bookweald.Fb2_parse.parse_book_info path aliases in
+            let book = Fb2_parse.parse_book_info path aliases in
             let id = Db.find_or_insert_book c book in
             Log.debug (fun m -> m "%s → OK" (Filename.basename path));
             id

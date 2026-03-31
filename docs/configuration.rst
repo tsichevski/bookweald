@@ -30,6 +30,11 @@ The configuration is represented by a record with the following fields:
 - verbose (boolean)  
   If true: print detailed progress and debug information.
 
+- drop_existing_log_file_on_start (boolean)  
+  If true and a ``log_file`` is configured: truncate (drop) the existing log file  
+  on program startup.  
+  Default: false (append mode).
+
 
 Default values
 --------------
@@ -40,7 +45,7 @@ When no valid config file is found, the tool uses these defaults::
    target_dir       = ~/books/organized
    dry_run          = false
    verbose          = true
-
+   drop_existing_log_file_on_start = false
 
 Configuration file locations
 ----------------------------
@@ -90,6 +95,7 @@ Example config file
      "library_dir": "/home/user/my-fb2-collection/zips",
      "target_dir":  "/home/user/my-fb2-collection/organized",
      "dry_run":     false,
+     "drop_existing_log_file_on_start": false,
      "verbose":     true
    }
 
