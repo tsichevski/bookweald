@@ -1,6 +1,6 @@
-=================================
+================
 Organize Command
-=================================
+================
 
 .. contents::
    :depth: 2
@@ -10,7 +10,7 @@ Organize Command
 Purpose
 -------
 
-The ``organize`` subcommand parses all FB2 files in the configured ``library_dir``,
+The ``group`` subcommand parses all FB2 files in the configured ``library_dir``,
 extracts author and title metadata, groups books by author, and moves them into
 subdirectories under ``target_dir`` named after each author.
 
@@ -33,13 +33,13 @@ Usage
 
 Basic::
 
-   bookweald organize
+   bookweald group
 
 With options::
 
-   bookweald organize --verbose
-   bookweald organize --dry-run
-   bookweald organize --config ./custom-config.json
+   bookweald group --verbose
+   bookweald group --dry-run
+   bookweald group --config ./custom-config.json
 
 
 Behavior details
@@ -102,5 +102,5 @@ Future improvements (planned)
 See also
 --------
 
-- Configuration Management — how to set library_dir and target_dir
+- Configuration Management — how to set ``library_dir`` and ``target_dir``
 - Command-line Interface — full list of options and subcommands
