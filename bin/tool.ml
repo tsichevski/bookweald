@@ -87,10 +87,31 @@ let find_fb2_files dir =
         
   aux dir []
 
+(** Connect to the DB *)
 let connect (cfg : Config.t) as_admin =
   let db = cfg.database in
   let user,password = if as_admin then (db.admin, db.admin_passwd) else (db.user, db.passwd) in
   Db.connect ~host:db.host ~user:user ~password:password ~port:db.port ~dbname:db.name ()
+
+(** [blacklisted blacklist_file] Returns predicate testing if the argument is listed in the text
+    file at [blacklist_file] path *)
+let blacklisted blacklist_file =
+    match blacklist_file with
+    | None ->
+      Log.info (fun m -> m "No black list file will be used");
+      (fun _ -> false)
+      
+    | Some path ->
+      let table = Blacklist.load path in
+      let length = Hashtbl.length table in
+      if length > 0 then
+        Log.info (fun m -> m "Blacklist table has %d unique filenames" length);        
+      (fun path -> (Hashtbl.mem table (Filename.basename path)))
+
+(** [partition paths blacklist_file] Split the file path list [paths] into two groups: blacklisted, not blacklisted,
+    based on the list in the text file at [blacklist_file] path *)
+let partition paths blacklist_file =
+  List.partition (blacklisted blacklist_file) paths
 
 let dry_run =
   let doc = "Do not actually change anything, just show what would happen." in
@@ -130,7 +151,7 @@ let init_cmd =
     `P "Creates ~/.config/bookweald/config.json with default values."
   ] in
   let action_term =
-    Term.(const (fun dry -> `Init dry) $ dry_run)
+    Term.(const (fun overwrite -> `Init overwrite) $ overwrite)
   in
   make_cmd "init" doc man action_term
 
@@ -217,8 +238,33 @@ let index_cmd =
   in
   make_cmd "index" doc man action_term
 
+(** Get the tool configuration and init logging *)
+let config config_file =
+  let config_path = match config_file with
+  | Some p -> p
+  | None ->
+    let home = Sys.getenv "HOME" in
+    Filename.concat (Filename.concat home ".config") "bookweald/config.json"
+  in
+  let cfg = 
+    if Sys.file_exists config_path then
+      Config.load config_path
+    else
+      Config.default () in
+  ignore(match cfg.log_file with
+  | None -> Logs.set_reporter (Logs.format_reporter ())
+  | Some p -> Logging.setup cfg.drop_existing_log_file_on_start p);
+    
+  Logs.set_level (match cfg.log_level with
+  | None -> (Some Logs.Info)
+  | Some name -> 
+    match Logs.level_of_string name with
+    | Ok l -> l
+    | Error (`Msg msg) -> failwith msg);
+  cfg
+
 (** Main entry point *)
-let main () =
+let () =
   let lock = Mutex.create () in
   let lock () = Mutex.lock lock and unlock () = Mutex.unlock lock in
   Logs.set_reporter_mutex ~lock ~unlock;
@@ -250,36 +296,12 @@ let main () =
   let tool = Cmd.group ~default:default_term info subcommands in
 
   match Cmd.eval_value tool with
-  | Ok (`Ok (config_file, action)) ->
-    (* Global setup *)
-    let config_path = match config_file with
-    | Some p -> p
-    | None ->
-      let home = Sys.getenv "HOME" in
-      Filename.concat (Filename.concat home ".config") "bookweald/config.json"
-    in    
-    Log.debug (fun m -> m "Loading configuration from %s" config_path);
-    let cfg =
-      if Sys.file_exists config_path then
-        Config.load config_path
-      else
-        Config.default () in
-        
-    ignore(match cfg.log_file with
-    | None -> Logs.set_reporter (Logs.format_reporter ())
-    | Some p -> Logging.setup cfg.drop_existing_log_file_on_start p);
-    
-    Logs.set_level (match cfg.log_level with
-    | None -> (Some Logs.Info)
-    | Some name -> 
-      match Logs.level_of_string name with
-      | Ok l -> l
-      | Error (`Msg msg) -> failwith msg);
-
+  | Ok (`Ok (config_file, action)) ->        
     (* Dispatch action *)
     begin
       match action with
       | `Extract (zip, dry_run, overwrite) ->
+        let cfg = config config_file in
         let dry_run = dry_run || cfg.dry_run in
         if dry_run then
           Log.info (fun m -> m "[dry-run] Would extract from %s to %s" zip cfg.library_dir)
@@ -294,24 +316,23 @@ let main () =
             exit 1
         end
       
-      | `Init dry_run ->
+      | `Init overwrite ->
         begin
-          let dry_run = dry_run || cfg.dry_run in
-          if dry_run then begin
-            Log.info (fun m -> m "[dry-run] Would create default config");
+          let path = Filename.concat (Sys.getenv "HOME") ".config/bookweald/config.json" in
+          try
+            if Config.create_default path overwrite then
+              Log.info (fun m -> m "Created config: %s" path)
+            else
+              Log.warn (fun m -> m "Config file exists and was not overwritten: %s" path)
+            ;
             exit 0
-          end else
-            let path = Filename.concat (Sys.getenv "HOME") ".config/bookweald/config.json" in
-            try
-              Config.create_default path;
-              Log.info (fun m -> m "Created config: %s" path);
-              exit 0
-            with e ->
-              Log.err (fun m -> m "Failed to create config: %s" (Printexc.to_string e));
-              exit 1
+          with e ->
+            Log.err (fun m -> m "Failed to create config: %s" (Printexc.to_string e));
+            exit 1
         end
         
       | `Group (source_dir, dry_run, overwrite, max_component_len, jobs) ->
+        let cfg = config config_file in
         let dry_run = dry_run || cfg.dry_run in
         let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
 
@@ -362,14 +383,6 @@ let main () =
             incr failures;
             let reason = Printexc.to_string e in
             Log.warn (fun m -> m "%s → FAILED: %s" (Filename.basename path) reason);
-        
-            if not dry_run then begin
-              let dest_name = Filename.basename path in
-              let dest_path = Filename.concat cfg.invalid_dir dest_name in
-              Fs.mkdir_p cfg.invalid_dir;
-              Sys.rename path dest_path;
-              Log.debug (fun m -> m " → Moved %s to %s" path dest_path);
-            end;
           )
           fb2_files);
 
@@ -380,6 +393,7 @@ let main () =
         exit 0
 
       | `SchemaInit dry_run ->
+        let cfg = config config_file in
         let dry_run = dry_run || cfg.dry_run in
         if not dry_run then
           begin
@@ -399,6 +413,7 @@ let main () =
           end
         
       | `Validate (source_dir, dry_run, reverse, jobs) ->
+        let cfg = config config_file in
         begin
           let dry_run = dry_run || cfg.dry_run
           and source_dir = match source_dir with Some p -> p | None -> cfg.library_dir
@@ -406,32 +421,17 @@ let main () =
         
           Log.info (fun m -> m "Validate mode\n Scanning: %s\n jobs: %d" source_dir jobs);
 
-          let in_blacklist =
-            match blacklist with
-            | None ->
-              Log.info (fun m -> m "No black list file will be used");
-              (fun _ -> true)
-              
-            | Some path ->
-              Log.info (fun m -> m "Black list file: %s, reverse action: %b" path reverse);
-              let table = Blacklist.load path in
-              let length = Hashtbl.length table in
-              if length > 0 then
-                Log.info (fun m -> m "Blacklist table has %d unique filenames" length);
-              
-              (fun path -> (Hashtbl.mem table (Filename.basename path)))
-          in
-        
           let fb2_files = find_fb2_files source_dir in
-          
-          let black, not_black = List.partition in_blacklist fb2_files in
-    
+          let blacklisted = blacklisted blacklist in
+          let black, not_black = List.partition blacklisted fb2_files in
+
           let blacklisted_length = List.length black in
           let to_process = if reverse then black else not_black in
+          let to_process_length = List.length to_process in
           Log.info (fun m -> m "fb2 files found: %d total, %d blacklisted, %d to process."
             (List.length fb2_files)            
             blacklisted_length
-            (List.length to_process));
+            to_process_length);
     
           let failures = ref 0 in
           ignore(parallel_execute jobs
@@ -448,23 +448,24 @@ let main () =
                 match blacklist with
                 | None -> ()
                 | Some file ->
-                  if not (in_blacklist basename) then
+                  if not (blacklisted basename) then
                     begin
-                      Log.info (fun m -> m "Adding to blacklist %s" basename);
+                      Log.info (fun m -> m "Adding %s to blacklist" basename);
                       Blacklist.append file path reason
                     end
             )
             to_process);
       
           if !failures > 0 then
-            Log.warn (fun m -> m "Validation complete: %d/%d files failed" !failures blacklisted_length)
+            Log.warn (fun m -> m "Validation complete: %d/%d files failed" !failures to_process_length)
           else
-            Log.info (fun m -> m "All %d files validated successfully" blacklisted_length);
+            Log.info (fun m -> m "All %d files validated successfully" to_process_length);
           
           exit 0
         end
         
       | `Index (source_dir, dry_run, overwrite, jobs) ->
+        let cfg = config config_file in
         let dry_run = dry_run || cfg.dry_run in
         let source_dir = match source_dir with Some p -> p | None -> cfg.library_dir in
         Log.info (fun m -> m "Index mode\n Scanning: %s\n Requested jobs: %d"
@@ -473,9 +474,17 @@ let main () =
         if dry_run then Log.info (fun m -> m " [dry-run] No files will be indexed");
 
         let fb2_files = find_fb2_files source_dir in
+        let blacklisted = blacklisted cfg.blacklist in
+        let black, to_process = List.partition blacklisted fb2_files in
+
+        let blacklisted_length = List.length black in
+        let to_process_length = List.length to_process in
     
         let total = List.length fb2_files in
-        Log.info (fun m -> m "Found %d .fb2 files" total);
+        Log.info (fun m -> m "fb2 files found: %d total, %d blacklisted, %d to process."
+          (List.length fb2_files)            
+          blacklisted_length
+          to_process_length);
     
         let failures = ref 0 in
         let c = connect cfg false in
@@ -485,7 +494,7 @@ let main () =
         | Some path -> Some (Alias.load_aliases path)
         in
 
-        let result = parallel_execute jobs
+        ignore(parallel_execute jobs
           (fun path ->
             let book = Fb2_parse.parse_book_info path aliases in
             let id = Db.find_or_insert_book c book in
@@ -502,14 +511,8 @@ let main () =
             Log.warn (fun m -> m "%s → FAILED: %s" (Filename.basename path) reason);
             raise e
           )
-          fb2_files
-        in
-        List.iter (function
-          | Ok id ->
-            Log.debug (fun m -> m "Ok: %s" id)
-          | Error _ -> ())
-          result
-        ;
+          fb2_files);
+
         if !failures > 0 then
           Log.info (fun m -> m "Indexing complete: %d/%d files failed" !failures total)
         else
@@ -519,7 +522,6 @@ let main () =
       | `Help       -> ()
     end
 
-  | Ok (`Version | `Help) -> exit 0
+  | Ok (`Version | `Help) ->
+    exit 0
   | Error _ -> exit 1
-
-let () = main ()

@@ -31,4 +31,4 @@ val extract_encoding : string -> string
     If no declaration found (file doesn't start with <?xml), returns ("utf-8", "").
     If file ends before declaration is complete, returns ("utf-8", partial_declaration).
 *)
-val read_declaration : in_channel -> string * string
+val read_declaration : char Seq.t -> string * char Seq.t

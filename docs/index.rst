@@ -1,6 +1,6 @@
-====================================
-Home Book Library Management Project
-====================================
+=================================
+Home Book Library Management Tool
+=================================
 
 .. contents::
    :depth: 2

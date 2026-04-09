@@ -11,5 +11,6 @@ This catalog contains the following files:
 #. ``utf8_simple.fb2``: FB2 sample file in UTF8
 #. ``cp1251_simple.fb2``: FB2 sample file in CP1251
 #. ``koi8r_simple.fb2``: FB2 sample file in KOI8-R
+#. ``utf8_simple.fb2``: FB2 sample file in UTF8, no XML declaration
    
    

@@ -68,7 +68,8 @@ let extract_fb2_files ?(overwrite:bool = true) zip_path target_dir : (string lis
     Ok fb2_paths_rev
   end
 
-let unzip_fb2_file contents =
+let unzip_fb2_file (src: char Seq.t) : char Seq.t =
+  let contents = String.of_seq src in
   let zip =
     match Zipc.of_binary_string contents with
     | Ok z -> z
@@ -95,4 +96,4 @@ let unzip_fb2_file contents =
     zip None
   with
   | None -> failwith "No matching .fb2 file in archive"
-  | Some d -> d
+  | Some data -> String.to_seq data

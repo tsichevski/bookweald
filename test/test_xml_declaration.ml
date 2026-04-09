@@ -1,19 +1,26 @@
 open Alcotest
 open Bookweald.Xml_declaration
+open Bookweald.Utils
+
+let test src exp_encoding exp_rest =
+  let enc = extract_encoding 
+    {|<?xml version="1.0" encoding="windows-1251"?>|}
+  in
+  check string "detects cp1251" "windows-1251" enc
 
 let test_extract_encoding () =
-  let enc = Bookweald.Xml_declaration.extract_encoding 
+  let enc = extract_encoding 
     {|<?xml version="1.0" encoding="windows-1251"?>|}
   in
   check string "detects cp1251" "windows-1251" enc
 
 let test_extract_encoding_default () =
-  let enc = Bookweald.Xml_declaration.extract_encoding {|<?xml version="1.0"?>|}
+  let enc = extract_encoding {|<?xml version="1.0"?>|}
   in
   check string "defaults to utf-8" "utf-8" enc
 
 let test_extract_encoding_malformed () =
-  let enc = Bookweald.Xml_declaration.extract_encoding {|garbage|}
+  let enc = extract_encoding {|garbage|}
   in
   check string "malformed returns utf-8" "utf-8" enc
 

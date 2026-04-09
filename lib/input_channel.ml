@@ -1,3 +1,5 @@
+module Log = (val Logs.src_log (Logs.Src.create "input-channel" ~doc:"Bufferring channel with mark capabilities.") : Logs.LOG)
+
 type t = {
   mutable underlying : char Seq.t;   (* source of bytes *)
   buffer : Buffer.t;                 (* recorded bytes since the mark *)
@@ -14,19 +16,21 @@ let create s = {
 
 (** Start recording *)
 let mark m =
+  (* Log.debug (fun m -> m "Mark"); *)
   m.recording <- true
 
 (** Revert to mark *)
 let reset m =
+  (* Log.debug (fun m -> m "Reset"); *)
   m.recording <- false
 
 (** Commit transaction *)
 let drop_mark m =
+  (* Log.debug (fun m -> m "Drop mark"); *)
   Buffer.clear m.buffer;
   m.read_pos <- 0;
   m.recording <- false
   
-;;
 (* Returns the current view as a char Seq.t *)
 let to_seq m =
   let rec make () =
@@ -34,14 +38,16 @@ let to_seq m =
       match Seq.uncons m.underlying with
       | None -> Seq.Nil
       | Some (c, tail) ->
-          m.underlying <- tail;
-          Buffer.add_char m.buffer c;
-          Seq.Cons (c, make)
+        (* Log.debug (fun m -> m "Recoding: %c" c); *)
+        m.underlying <- tail;
+        Buffer.add_char m.buffer c;
+        Seq.Cons (c, make)
     else
       (** No recording, fetch from buffer *)  
       if Buffer.length m.buffer > m.read_pos then begin
         (** Some chars in buffer available *)
         let c = Buffer.nth m.buffer m.read_pos in
+        (* Log.debug (fun m -> m "Reading buffer: %c" c); *)
         m.read_pos <- m.read_pos + 1;
         Seq.Cons (c, make)
       end else
@@ -49,12 +55,30 @@ let to_seq m =
         match Seq.uncons m.underlying with
         | None -> Seq.Nil
         | Some (c, tail) ->
+          (* Log.debug (fun m -> m "Direct retrieving: %c" c); *)
           m.underlying <- tail;
           Seq.Cons (c, make)
   in
   make
 
-(* The rest functions are old and not sequence-oriented *)
+let take n is =
+  let b = Buffer.create n in
+  let rec next n is =
+    if n = 0 then
+      (Buffer.contents b), is
+    else    
+      match Seq.uncons is with
+      | None -> (Buffer.contents b), is
+      | Some (c, tail) ->
+        begin
+          Buffer.add_char b c;
+          next (n - 1) tail
+        end
+  in
+  next n is
+
+
+    (* The rest functions are old and not sequence-oriented *)
 let input_line ic =
   let buf = Buffer.create 512 in
   let rec loop () =    

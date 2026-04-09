@@ -46,9 +46,6 @@ type t = {
   (** Destination directory for organized books (author-based structure). *)
   target_dir : string;
 
-  (** Directory for files that failed validation or parsing. *)
-  invalid_dir : string;
-
   (** If [true], simulate all operations without modifying the filesystem or database. *)
   dry_run : bool [@default false];
 
@@ -129,7 +126,6 @@ let default () : t =
   {
     library_dir      = Filename.concat home "books/incoming";
     target_dir       = Filename.concat home "books/organized";
-    invalid_dir      = Filename.concat home "books/invalid";
     alias_file       = None;
     dry_run          = false;
     max_component_len = 0;
@@ -182,14 +178,19 @@ let load path : t =
       (* creates the file with default values and prints confirmation *)
     ]}
 *)
-let create_default (path : string) : unit =
-  let cfg = default () in
-  let json = to_yojson cfg in
-  let pretty = Yojson.Safe.pretty_to_string ~std:true json in
-
+let create_default (path : string) (overwrite : bool) =
   let dir = Filename.dirname path in
   if not (Sys.file_exists dir) then
     Fs.mkdir_p dir ~perm:0o755;
 
-  Out_channel.with_open_gen [Open_wronly; Open_creat] 0o644 path
-    (fun oc -> output_string oc (pretty ^ "\n"))
+  if not (Sys.file_exists path) || overwrite then
+    begin
+      let cfg = default () in
+      let json = to_yojson cfg in
+      let pretty = Yojson.Safe.pretty_to_string ~std:true json in
+
+      Out_channel.with_open_gen [Open_wronly; Open_creat] 0o644 path
+        (fun oc -> output_string oc (pretty ^ "\n"));
+      true
+    end else false    
+    

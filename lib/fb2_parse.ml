@@ -61,8 +61,18 @@ let locate input path = parse input (fun _txt path' -> List.equal String.equal p
 let parse_visit path h =
   In_channel.with_open_bin path
     (fun ic ->
-      let encoding, _ = Xml_declaration.read_declaration ic in
       let src = Utils.ic_to_seq ic in
+      let src = 
+        if Filename.check_suffix path "fb2.zip" then
+          begin
+            Log.debug (fun m -> m "Opening unzipping channel for %s" path);
+            Unzip.unzip_fb2_file src
+          end
+        else
+          src
+      in        
+      let encoding, src = Xml_declaration.read_declaration src in
+      Log.debug (fun m -> m "File encoding %s" encoding);
       let seq =
         if encoding = "utf-8" then
           src

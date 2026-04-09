@@ -46,4 +46,4 @@ val extract_fb2_files :
   ?overwrite:bool -> string -> string -> (string list, string) result
 
 (** [unzip_fb2_file contents] treats the argument as a ZIP archive contents, and extract the first zip entry with name ending with .fb2 to a string *)
-val unzip_fb2_file : string -> string
+val unzip_fb2_file : char Seq.t -> char Seq.t

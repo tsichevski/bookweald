@@ -1,6 +1,6 @@
 (executable
  (public_name bookweald)
- (name cli)
+ (name tool)
  (modes byte exe)
  (flags :standard -g -o)
  (libraries bookweald

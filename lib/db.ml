@@ -256,6 +256,8 @@ CREATE TABLE IF NOT EXISTS books (
   created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 |sql};
+    "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE books TO books";
+    "GRANT SELECT, UPDATE ON SEQUENCE books_id_seq TO books";
 
     {sql|
 CREATE TABLE IF NOT EXISTS persons (
@@ -266,6 +268,8 @@ CREATE TABLE IF NOT EXISTS persons (
   normalized_name  TEXT NOT NULL UNIQUE
 )
 |sql};
+    "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE persons TO books";
+    "GRANT SELECT, UPDATE ON SEQUENCE persons_id_seq TO books";
 
     {sql|
 CREATE TABLE IF NOT EXISTS book_authors (
@@ -274,6 +278,7 @@ CREATE TABLE IF NOT EXISTS book_authors (
   PRIMARY KEY (book_id, person_id)
 )
 |sql};
+    "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE book_authors TO books";
 
     "CREATE INDEX IF NOT EXISTS idx_books_digest ON books(digest)";
     "CREATE INDEX IF NOT EXISTS idx_persons_normalized_name ON persons(normalized_name)";
