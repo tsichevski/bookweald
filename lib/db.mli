@@ -96,9 +96,3 @@ val delete_book : connection -> book -> book_id
     @return the internal ID of the deleted book
     @raise Failure if no matching book was found
 *)
-
-(** {1 Low-level helpers (for advanced use)} *)
-
-val insert_book : connection -> book -> book_id
-val insert_person : connection -> string -> person -> person_id
-val find_person_opt : connection -> string -> person_id option

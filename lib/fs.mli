@@ -1,42 +1,41 @@
-(** Filesystem utilities for BookWeald.
+(** Filesystem utilities.
 
-    This module provides safe directory creation, filename sanitization,
-    and file-type checks used during book import and organization.
-
-    All functions are minimal and match the original implementation.
+    Provides safe directory creation with parents, file type checks,
+    filename sanitization for cross-platform use, and binary file reading.
 *)
 
-(** [mkdir_p ?perm path] creates the directory [path] and all missing parent
-    directories (like [mkdir -p]). Safe if the path already exists.
+(** {1 Directory operations} *)
 
-    @param perm Optional permission mode (default: 0o755)
-    @raise Failure if the path exists but is not a directory
-    @raise Unix.Unix_error on other file system errors
-*)
 val mkdir_p : ?perm:int -> string -> unit
+(** [mkdir_p ?perm path] creates the directory [path] and all missing parent
+    directories. Behaves like [mkdir -p].
 
-(** [is_regular_file path] returns true if [path] exists and is a regular file
-    (not directory, symlink, device, etc.). Returns false on non-existent paths or errors.
+    Uses permission [0o755] by default. Raises [Failure] on errors.
 *)
+
+(** {1 File checks} *)
+
 val is_regular_file : string -> bool
-
-(** [sanitize_filename s max_len] creates a safe filename by replacing forbidden
-    characters with '_', trimming whitespace, and truncating to [max_len] bytes
-    (if [max_len > 0]).
-
-    Forbidden characters: / \ : * ? {|"|} < > | and control characters (0-31).
-
-    If the result would be empty, returns "unnamed".
-    If truncation occurs, appends "…".
-
-    Example:
-
-    {[
-      sanitize_filename "Лев Толстой: Война и мир (1869)" 50
-      (* returns something like "Лев Толстой_Война и мир (1869)" or truncated *)
-    ]}
+(** [is_regular_file path] returns [true] if the path exists and is a regular
+    file (not a directory or special file).
 *)
-val sanitize_filename : string -> int -> string
 
-(** [read_file_binary path] read the file contents as a string *)
+(** {1 Filename utilities} *)
+
+val sanitize_filename : string -> int -> string
+(** [sanitize_filename s max_len] sanitizes a string for safe use as a
+    filename or directory name.
+
+    - Replaces forbidden characters ([/ \ : * ? {|"|} < > |] and control chars) with [_].
+    - Trims whitespace.
+    - If [max_len > 0] and the result is longer than [max_len], truncates and adds […].
+    - Returns ["unnamed"] if the result would be empty.
+*)
+
+(** {1 I/O helpers} *)
+
 val read_file_binary : string -> string
+(** [read_file_binary path] reads the entire file as binary and returns its
+    contents as a string.
+*)
+    

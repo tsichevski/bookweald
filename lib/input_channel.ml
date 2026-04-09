@@ -76,31 +76,3 @@ let take n is =
         end
   in
   next n is
-
-
-    (* The rest functions are old and not sequence-oriented *)
-let input_line ic =
-  let buf = Buffer.create 512 in
-  let rec loop () =    
-    match ic () with
-    | Some c ->
-      begin
-        match c with
-        | 13 -> loop ()
-        | 10 -> Some (Buffer.contents buf)
-        | c -> Buffer.add_uint8 buf c; loop ()
-      end
-    | None -> None in
-  loop ()
-      
-let input ic buf ofs len =
-  let rec loop i =
-    if i = len then
-      len
-    else
-      match ic () with
-      | Some c -> Bytes.set buf (ofs + i) (Char.chr c);
-      loop (i + 1)
-      | None -> i in
-  loop 0
-

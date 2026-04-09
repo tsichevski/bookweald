@@ -39,3 +39,4 @@ val create_cp1255 : char Seq.t -> t
 (** {2 Input functions} *)
 
 val to_seq : t -> char Seq.t
+(** [to_seq ch] returns a fresh sequence respecting the current mark state. *)
