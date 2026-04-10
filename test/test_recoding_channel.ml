@@ -20,9 +20,9 @@ let test_cp1251 () =
 let test_koi8 () =
   let input = In_channel.open_bin "../../../test/fixtures/128-255.txt" in
   let recoded =  recode create_koi8r input in
-  Stdlib.Printf.printf "%s\n" recoded;  
+  (* Printf.printf "%s\n" recoded;   *)
   let expected = Fs.read_file_binary "../../../test/fixtures/128-255_koi8_utf8.txt" in
-  Stdlib.Printf.printf "%s\n" expected;  
+  (* Printf.printf "%s\n" expected;   *)
   check string "koi8"
     expected
     recoded
