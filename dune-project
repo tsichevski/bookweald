@@ -20,7 +20,12 @@
   zipc
   (cmdliner (>= 1.2.0))
   (miou (>= 0.5.4))
-  postgresql
+   postgresql
+   logs
+   uucp
+   ppx_deriving_yojson
+   xmlm
+   alcotest
  )
 
  (tags

@@ -71,6 +71,11 @@ Top-level fields
 - ``alias_file`` (string, optional)  
   Path to author alias JSON file.
 
+.. _db-configuration:
+
+Configure Database
+~~~~~~~~~~~~~~~~~~
+
 - ``database`` (object)  
   PostgreSQL connection settings:
 
@@ -182,6 +187,6 @@ Notes
 See also
 --------
 
-- :doc:`blacklist`
-- :doc:`indexing`
+- :doc:``blacklist``
+- :doc:``indexing``
 - Command-line interface (``bookweald init``, etc.)

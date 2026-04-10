@@ -1,6 +1,6 @@
-====================================================
-Streaming Support for Compression Libraries in OCaml
-====================================================
+=========================================================
+Streaming Support for Compression Libraries (Future Plan)
+=========================================================
 
 .. index:: streaming, gzip, bzip2, camlzip, decompress, bz2, zipc
 
@@ -17,6 +17,7 @@ Streaming Support Overview
 --------------------------
 
 - **camlzip** (``Gzip`` module for ``.gz`` files)
+  
   - **Yes**, it supports true streaming decompression.
   - ``Gzip.open_in`` (or ``Gzip.open_in_chan``) returns an abstract input channel.
   - Read incrementally with ``Gzip.input``, ``Gzip.really_input``, or line-by-line functions.
@@ -24,6 +25,7 @@ Streaming Support Overview
   - Suitable for large files, pipes, or network streams.
 
 - **decompress** (``decompress.gz`` sub-package for ``.gz``)
+  
   - **Yes**, and it is explicitly designed for streaming.
   - Provides a **non-blocking streaming codec** (``Gz.Inf``, ``Gz.Def``, etc.).
   - Feed input chunks and receive output chunks.
@@ -31,12 +33,14 @@ Streaming Support Overview
   - Pure OCaml implementation.
 
 - **bz2** (CamlBZ2 for ``.bz2`` files)
+  
   - **Yes**, it supports streaming decompression.
   - ``Bz2.open_in`` (or ``Bz2.open_in_chan``) returns a decompressing input channel.
   - Use standard channel functions (``input``, ``input_line``, ``really_input``, etc.).
   - Behaves like a normal ``in_channel`` while decompressing on the fly.
 
 - **zipc**
+  
   - **No** for standalone ``.gz`` or ``.bz2`` files (it does not support these formats).
   - For ZIP archives it is primarily **in-memory** (loads archive structure and entries).
   - Can handle deflate streams internally, but not oriented toward pure streaming of large archives.

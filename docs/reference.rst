@@ -2,10 +2,6 @@
 BookWeald Command-Line Reference
 ================================
 
-.. contents::
-   :depth: 2
-   :local:
-
 BookWeald is a command-line tool for managing your FictionBook (FB2) library.  
 It helps you organize, validate, index, and store information about your books.
 
@@ -14,14 +10,11 @@ Run any command with ``--help`` to see detailed options and usage.
 Available Commands
 ------------------
 
-**init**
-~~~~~~~~
+.. toctree::
+   :maxdepth: 2
 
-Creates a default configuration file for you.
-
-- Places the file in ``~/.config/bookweald/config.json``.
-- You can edit this file later to set your library folders and other preferences.
-- Use the ``--force`` option to overwrite an existing config file.
+   init_cmd
+   group_cmd
 
 **extract** ``<zipfile>``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -59,16 +52,6 @@ Reads all valid FB2 files and adds their details (title, authors, language, genr
 - Skips any files listed in the blacklist.
 - Can process multiple books in parallel (controlled by the ``jobs`` setting).
 - Shows a final summary with the total number of successfully indexed files.
-
-**group**
-~~~~~~~~~
-
-Moves and renames your books from the incoming folder into a clean, author-based folder structure in the target directory.
-
-- Organizes books like: ``Author Last Name / Author Name / Book Title.fb2``
-- Cleans up filenames so they are safe and readable on all operating systems.
-- Respects the ``dry-run`` mode (shows what it would do without making any changes).
-- Respects the maximum filename length setting from your config.
 
 Common Options
 --------------

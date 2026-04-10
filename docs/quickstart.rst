@@ -1,13 +1,13 @@
-=====================
-Bookweald Quick Start
-=====================
+===========
+Quick Start
+===========
 
 This tutorial describes the usual workflow with Bookweald.  
 The tool was created and tested on Ubuntu Linux, so this tutorial assumes you are on Linux.
 
 In this tutorial we will:
 
-- Configure the tool
+- Provide the minimal tool configuration
 - Add books
 - Validate the book files integrity
 - Register books in a PostgreSQL database
@@ -16,7 +16,7 @@ Configuration
 -------------
 
 Before you begin, you will most probably have to configure the tool.  
-The configuration is located in the file ``~/.config/bookweald/config.json``, which has JSON format.
+By default, the configuration is located in the file ``~/.config/bookweald/config.json``, which has JSON format.
 
 You can create this file manually, but the simplest way is by running::
 
@@ -25,17 +25,17 @@ You can create this file manually, but the simplest way is by running::
 This will create the following minimal configuration file::
 
   {
-    "library_dir": "/home/jondeer/books/incoming",
-    "target_dir": "/home/jondeer/books/organized",
+    "library_dir": "/home/johndoe/books/incoming",
+    "target_dir": "/home/johndoe/books/organized",
     "database": {}
   }
 
 In this minimal setup, these two directories are defined:
 
 - ``library_dir``: main directory containing books to process
-- ``target_dir``: the directory to move books to when using the ``organize`` command.
+- ``target_dir``: the directory to move books to when using the ``group`` command.
 
-The "jondeer" here stands for the current system user name.  
+The "johndoe" here stands for the current system user name.  
 If needed, replace the ``library_dir`` field value with the directory where you will put your FB2 files.  
 For now, do not make any other changes.
 
@@ -67,7 +67,7 @@ Invalid files are registered in the blacklist file. By default, this blacklist f
 Create and Initialise the Database
 ----------------------------------
 
-Bookweald allows you to store book information in a PostgreSQL database.
+Bookweald allows you to store book metadata in a PostgreSQL database.
 
 In this tutorial we will use the default DB name and connection parameters:
 
@@ -78,6 +78,8 @@ In this tutorial we will use the default DB name and connection parameters:
 - DB name: ``books``
 - admin user (used to create DB schema): ``admin``
 - admin user password: ``admin``
+
+If your setup differs, configure the database connection first. See :ref:`db-configuration`.
 
 Create a new database and initialise it with the DB schema:
 
@@ -102,15 +104,15 @@ Create a new database and initialise it with the DB schema:
                 List of relations
       Schema |     Name     | Type  | Owner
      --------+--------------+-------+-------
-      public | book_authors | table | admin
-      public | books        | table | admin
-      public | persons      | table | admin
+      public | book_authors | table | books
+      public | books        | table | books
+      public | persons      | table | books
      (3 rows)
 
 Indexing Books
 --------------
 
-Next, as soon as the DB is ready, we will add the book information to it::
+Next, as soon as the DB is ready, we will add the book metadata to it::
 
   bookweald index
 
@@ -120,9 +122,9 @@ The log output should end with a message similar to this::
 
 (where 123 is the actual number of files).
 
-Fast check the results with something like this::
+Fast check the results with something like this (adjust the query to match books in your library)::
 
-  echo "SELECT id, title, encoding, filename FROM books WHERE title LIKE 'Война и мир';" | psql -U books -w books
+  echo "SELECT id, title, encoding, filename FROM books WHERE title LIKE 'Война%';" | psql -U books -w books
 
 The output will look like this::
   
