@@ -156,16 +156,16 @@ let init_cmd =
   make_cmd "init" doc man action_term
 
 (** Command "schema-init" - (re)initializes DB schema *)
-let schema_init_cmd =
-  let doc = "Drop DB contents and initialize DB schema" in
-  let man = [
-    `S Manpage.s_description;
-    `P "Initializes DB schema.";
-  ] in
-  let action_term =
-    Term.(const (fun dry -> `SchemaInit dry) $ dry_run)
-  in
-  make_cmd "schema-init" doc man action_term
+   let schema_init_cmd =
+     let doc = "Drop DB contents and initialize DB schema" in
+     let man = [
+       `S Manpage.s_description;
+       `P "Initializes DB schema.";
+     ] in
+     let action_term =
+       Term.(const (fun overwrite -> `SchemaInit overwrite) $ overwrite)
+     in
+     make_cmd "schema-init" doc man action_term
 
 (** Extract command *)
 let extract_cmd =
@@ -300,6 +300,25 @@ let () =
     (* Dispatch action *)
     begin
       match action with
+      | `Init overwrite ->
+        begin
+          let path =
+            match config_file with
+            | Some path -> path
+            | None ->
+              Filename.concat (Sys.getenv "HOME") ".config/bookweald/config.json" in
+          try
+            if Config.create_default path overwrite then
+              Log.info (fun m -> m "Created config: %s" path)
+            else
+              Log.warn (fun m -> m "Config file exists and was not overwritten: %s" path)
+            ;
+            exit 0
+          with e ->
+            Log.err (fun m -> m "Failed to create config: %s" (Printexc.to_string e));
+            exit 1
+        end
+        
       | `Extract (zip, dry_run, overwrite) ->
         let cfg = config config_file in
         let dry_run = dry_run || cfg.dry_run in
@@ -316,21 +335,6 @@ let () =
             exit 1
         end
       
-      | `Init overwrite ->
-        begin
-          let path = Filename.concat (Sys.getenv "HOME") ".config/bookweald/config.json" in
-          try
-            if Config.create_default path overwrite then
-              Log.info (fun m -> m "Created config: %s" path)
-            else
-              Log.warn (fun m -> m "Config file exists and was not overwritten: %s" path)
-            ;
-            exit 0
-          with e ->
-            Log.err (fun m -> m "Failed to create config: %s" (Printexc.to_string e));
-            exit 1
-        end
-        
       | `Group (source_dir, dry_run, overwrite, max_component_len, jobs) ->
         let cfg = config config_file in
         let dry_run = dry_run || cfg.dry_run in
@@ -424,15 +428,15 @@ let () =
           Log.info (fun m -> m  "All %d files grouped successfully" to_process_length);
         exit 0
 
-      | `SchemaInit dry_run ->
+      | `SchemaInit overwrite ->
         let cfg = config config_file in
-        let dry_run = dry_run || cfg.dry_run in
-        if not dry_run then
           begin
             try
               Log.info (fun m -> m "Initialize DB schema");
               let admconn = connect cfg true in
-              Db.drop_schema admconn;
+              if overwrite then
+                Db.drop_schema admconn;
+                
               Db.init_schema admconn;
               Db.close admconn;
             with e ->

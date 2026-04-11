@@ -49,22 +49,19 @@ We define an ``author`` record type and aim to collect all matching ``<author>``
 
 The **first** author in this list is considered principal and is used to form target directory names / filenames during organization.
 
-Current implementation (March 2026)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Current implementation
+~~~~~~~~~~~~~~~~~~~~~~
 
 Implemented in ``lib/fb2_parse.ml`` using ``xmlm`` (streaming XML parser).
 
-Only one author is currently handled: all matching fields (first/middle/last name, nickname, etc.) are extracted into the same record — later occurrences **overwrite** previous ones.
+Only **one** author is currently handled: all matching fields (first/middle/last name, nickname, etc.) are extracted into the same record — later occurrences **overwrite** previous ones.
 
-This produces acceptable results for:
-
-- single-author books
-- many co-authored works where the same names are repeated
+This produces acceptable results for single-author books.
 
 No multi-author grouping exists yet; each book is assigned to exactly one author folder.
 
-Legacy encoding support — fully implemented
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Legacy encoding support
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Many older Russian FB2 files use legacy 8-bit encodings (primarily ``windows-1251`` / CP1251, sometimes ``KOI8-R``) instead of UTF-8, even when declaring such in the XML prologue.
 
@@ -98,9 +95,11 @@ Planned improvements
 
 - Collect multiple authors into a list (parse all ``<author>`` blocks in order)
 - Choose principal author with heuristics:
+  
   - first from ``<title-info>``
   - prefer blocks with non-empty ``<last-name>``
   - most complete / longest name
+  
 - Pretty-print joined author names for display/index („Аркадий и Борис Стругацкие“, „Стругацкий А. Н., Стругацкий Б. Н.“)
 - Use full author list for folder name disambiguation when needed
 - Add support for book series and sequence info (``<sequence>`` element)
@@ -112,4 +111,3 @@ Future extensions
 
 - Handle ZIP archive import with on-the-fly extraction and parsing
 - Optional validation against fixed FB2 schema (post-parsing checks)
-- Configuration file for encoding preferences or fallback rules

@@ -4,19 +4,30 @@
 Group Command
 =============
 
-.. contents::
-   :depth: 2
-   :local:
+The ``group`` command organizes the library by author. It scans the library directory for FB2 book files, extracts metadata, sanitizes names, and moves each book into an author-named subdirectory under the target directory.
 
-Purpose
--------
+**Key Features**
 
-The ``group`` command organizes your digital book library by author. It scans the library directory for FB2 book files, extracts metadata, sanitizes names, and moves each book into an author-named subdirectory under the target directory.
+- Recursively scans for ``.fb2`` and ``.fb2.zip`` files
+- Parses book metadata with strict title guarantee
+- Sanitizes the created filenames
+- Automatic conflict resolution via numeric suffixes on the title
+- Dry-run mode to preview every planned move/rename
+- Force mode to overwrite existing files
+- Parallel processing support
+- Per-file error reporting (does not stop on single-file failures)
 
 The resulting structure is always: ``target_dir/Author Name/Title.fb2``
 
-Filename Devising Algorithm
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Options**
+
+- ``--dry-run`` / ``-n``: Preview without moving anything
+- ``--force`` / ``-f``: Silently overwrite existing files in the target directory
+- ``--path PATH``: Custom source directory
+- ``--max-component-len N``: Limit path component length
+- ``--jobs N`` / ``-j N``: Parallel jobs
+
+**Filename Devising Algorithm**
 
 1. **Author handling**:
    
@@ -45,6 +56,7 @@ Filename Devising Algorithm
      - First conflict → ``Title(1).fb2``
      - Second conflict → ``Title(2).fb2``
      - And so on, incrementing the number until a free name is found.
+     
    - The suffix is added before the extension.
 
 5. **Length limiting**:
@@ -52,41 +64,15 @@ Filename Devising Algorithm
    - The configured ``max-component-len`` is applied to both the author directory name and the full basename.
    - Truncation happens intelligently if needed, while always preserving the extension.
 
-Key Features
-------------
+**Examples**
 
-- Recursively scans for ``.fb2`` and ``.fb2.zip`` files
-- Robust metadata parsing with strict title guarantee
-- Consistent global sanitization for safe cross-platform filenames
-- Automatic conflict resolution via numeric suffixes on the title only
-- Dry-run mode to preview every planned move/rename
-- Force mode to overwrite existing files
-- Parallel processing support
-- Per-file error reporting (does not stop on single-file failures)
+#. Process all files in the ``./books`` directory, do not do any real changes, just log what should be done::
 
-Usage
------
+     bookweald group --dry-run --path ./books
 
-Basic usage::
-
-   bookweald group
-
-Common options:
-
-- ``--dry-run`` / ``-n``: Preview without moving anything
-- ``--force`` / ``-f``: Overwrite without prompting
-- ``--path PATH``: Custom source directory
-- ``--max-component-len N``: Limit path component length
-- ``--jobs N`` / ``-j N``: Parallel jobs (1 disables parallelism)
-
-Example::
-
-   bookweald group --dry-run --path ./books
-
-Notes
------
+**Notes**
 
 - Only the first author determines the destination directory, other authors in the metadata are ignored for grouping and naming
 - Because the library ensures every parsed book has a title, the basename is always well-formed
 - Author directories are reused; no duplicate folders are created
-- The process respects any configured blacklist
+- The process respects the configured blacklist

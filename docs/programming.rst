@@ -2,21 +2,12 @@
  Programming Topics
 ====================
 
-Development Workflow
---------------------
+.. warning:: This section is work-in-progress!
 
-For active development, pin the local package::
-
-   opam pin add bookweald .
-
-After making changes, rebuild with::
-
-   dune build
-
-Below is implementation-related topics, describing both current state and future development plans.
+Below are disparate implementation-related topics, describing both current state and future development plans.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
               
    fb2_parse
    recoding

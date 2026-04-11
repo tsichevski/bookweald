@@ -11,7 +11,7 @@ Available Commands
 ------------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    init_cmd
    extract_cmd
@@ -26,5 +26,4 @@ Common Options
 - ``--config <file>`` or ``-c <file>`` — use a specific configuration file.
 - ``--dry-run`` — simulate the operation and show what would happen without making any real changes (very useful before grouping).
 - ``--jobs <number>`` or ``-j <number>`` — how many books to process at the same time.
-- ``--verbose`` / ``-v`` — show more detailed messages.
-- ``--quiet`` — show fewer messages.
+
