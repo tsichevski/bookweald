@@ -1,113 +1,49 @@
-====================================
-Home Book Library Management Project
-====================================
+================================
+Bookweald — FB2 Library Manager
+================================
+
+Bookweald is a fast, lightweight **command-line tool** (and OCaml library) designed for users who manage large collections of FictionBook (FB2) ebooks.
+
+It helps you:
+
+- Extract books from ZIP archives without unpacking everything at once
+- Automatically organize your library by author (creating neat folders like ``Author Name/``)
+- Validate FB2 files for correctness
+- Build a searchable index of your entire collection
+- Handle different character encodings commonly found in older FB2 files
+- Manage author name variations and exclude unwanted books
 
 .. contents::
    :depth: 2
    :local:
 
-
-Introduction
-------------
-
-Bookweald is a command-line tool and OCaml library for managing, indexing, and processing FictionBook (FB2) digital libraries.
-
-It provides fast parsing, normalization, recoding, searching, and database-backed organization of FB2 files, with support for compression, character encoding detection/conversion, and metadata handling.
-
 Key Features
 ~~~~~~~~~~~~
 
-- FB2 2.1 parsing and validation support
-- Character encoding support (UTF-8, CP1251, KOI8-R, etc.)
-- Streaming decompression for zipped archives
-- Efficient indexing
-- Blacklist and author alias management
+- **Streaming decompression** — works directly with large ZIP archives
+- **Smart grouping** — moves books into author-named subdirectories
+- **Validation** — checks FB2 files against the FictionBook 2.1 standard
+- **Indexing** — builds a quick database for searching your library
+- **Author aliases & blacklisting** — clean up messy author names and hide unwanted titles
+- **Minimal dependencies** — fast and lightweight
 
-Location
---------
+Available Commands
+~~~~~~~~~~~~~~~~~~
 
-https://github.com/tsichevski/bookweald
+- ``init`` — create default configuration file
+- ``extract`` — extract FB2 files from ZIP archive(s)
+- ``group`` — parse FB2 files and move them into author-named subdirectories
+- ``validate`` — fully parse all FB2 files as XML
+- ``index`` — add files to the index
 
-Quickstart
-----------
+Project Links
+-------------
 
-See ``docs/quickstart.rst`` for installation and basic usage.
-
-.. note::
-   Detailed configuration options are documented in ``docs/configuration.rst``.
-
-Current Libraries Used
-----------------------
-
-Only minimal, lightweight dependencies are used:
-
-+--------------------+----------------------------------------+----------------------------------------------------+
-| Package            | Purpose                                | Why chosen                                         |
-+====================+========================================+====================================================+
-| camlzip / zip      | Read/extract ZIP archives              | Standard, reliable, small footprint                |
-+--------------------+----------------------------------------+----------------------------------------------------+
-| xml-light          | Parse FB2 XML for title & author       | Extremely lightweight, no extra deps, sufficient   |
-+--------------------+----------------------------------------+----------------------------------------------------+
-| unix (stdlib)      | File system operations (mkdir, rename) | No extra dependency needed                         |
-+--------------------+----------------------------------------+----------------------------------------------------+
-
-No heavy dependencies (camomile, yojson, cmdliner, index, etc.) are used yet.
-
-Dune build system is used for project structure.
-
-
-Project Structure (current)
----------------------------
-
-::
-
-  bookweald/
-  ├── bin/
-  │   ├── dune
-  │   └── tool.ml               # entry point (currently minimal/test)
-  ├── lib/
-  │   ├── dune
-  │   ├── fs.ml                 # mkdir_p helper
-  │   ├── unzip.ml              # ZIP extraction utilities
-  │   └── fb2_parse.ml          # FB2 title/author extraction
-  ├── dune-project              # (may be missing – add later)
-  ├── .gitignore
-  └── README.rst                # this file
-
-
-How to Build & Run (current)
-----------------------------
-
-::
-
-   # In project root
-   dune build bin/tool.exe
-
-   # Run (example – adjust paths)
-   ./_build/default/bin/tool.exe
-
-
-Current Limitations & Next Steps
---------------------------------
-
-- Assumes all FB2 files are valid UTF-8 (no legacy encoding conversion yet)
-- Author name is taken from the first <author> block only
-- Files are extracted but not yet moved/grouped by author
-- No command-line interface (only hardcoded test calls in tool.ml)
-- No persistent index or navigation tool
-
-Planned next steps (in rough priority order):
-
-1. Implement basic grouping by author (Hashtbl or Map)
-2. Add file moving to author-named subdirectories
-3. Add simple CLI (using Arg or cmdliner)
-4. Add configuration (JSON or simple file)
-5. Re-evaluate need for camomile (encoding) and index (persistent storage)
-
-Contributions & feedback welcome!
-
+- **Repository**: https://github.com/tsichevski/bookweald
+- **Documentation**: ``docs/index.rst`` (built with Sphinx)
+- **Issues & Feedback**: https://github.com/tsichevski/bookweald/issues
 
 License
 -------
 
-MIT
+MIT License — feel free to use, modify, and contribute!
